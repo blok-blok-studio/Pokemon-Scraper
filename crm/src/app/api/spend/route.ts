@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -23,13 +25,13 @@ export async function GET() {
     }),
     prisma.$queryRaw`
       SELECT
-        DATE("calledAt") as date,
+        DATE("called_at") as date,
         service,
-        SUM("estimatedCostUsd") as cost,
+        SUM("estimated_cost_usd") as cost,
         COUNT(*) as calls
-      FROM "ApiUsage"
-      WHERE "calledAt" >= ${monthStart}
-      GROUP BY DATE("calledAt"), service
+      FROM "api_usage"
+      WHERE "called_at" >= ${monthStart}
+      GROUP BY DATE("called_at"), service
       ORDER BY date DESC
     ` as Promise<any[]>,
     prisma.apiUsage.count()
