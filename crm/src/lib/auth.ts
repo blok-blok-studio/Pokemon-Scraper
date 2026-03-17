@@ -5,7 +5,7 @@ const SESSION_NAME = 'crm_session'
 const SESSION_VALUE = 'authenticated'
 
 export async function verifyPassword(password: string): Promise<boolean> {
-  const hash = process.env.CRM_PASSWORD_HASH
+  const hash = process.env.CRM_PASSWORD_HASH?.trim()
   if (!hash) return false
   return compare(password, hash)
 }
