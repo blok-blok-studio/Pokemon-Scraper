@@ -1,0 +1,7 @@
+[
+  { "name": "Charizard VMAX", "set": "Darkness Ablaze", "maxPrice": 150 },
+  { "name": "Pikachu VMAX", "set": "Vivid Voltage", "maxPrice": 80 },
+  { "name": "Lugia V Alt Art", "set": "Silver Tempest", "maxPrice": 200 },
+  { "name": "Mew VMAX Alt Art", "set": "Fusion Strike", "maxPrice": 120 },
+  { "name": "Umbreon VMAX Alt Art", "set": "Evolving Skies", "maxPrice": 350 }
+]

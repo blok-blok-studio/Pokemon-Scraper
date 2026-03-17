@@ -1,0 +1,12 @@
+{
+  "broadSearchTerms": ["Pokemon rare card lot under $50", "Pokemon card collection bulk", "Pokemon TCG rare holo"],
+  "minDiscountPercent": 15,
+  "maxPriceUSD": 500,
+  "scrapingIntervalMinutes": 30,
+  "outreachTimeHour": 10,
+  "dailySummaryHour": 20,
+  "maxDailyEmails": 20,
+  "maxDailyVoiceCalls": 10,
+  "emailCooldownDays": 30,
+  "voiceCooldownDays": 14
+}

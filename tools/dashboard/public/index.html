@@ -1,0 +1,285 @@
+<!-- Dashboard is for local/private network only. Add basic auth if exposing beyond localhost. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pokemon Card Agent Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #1a1a2e; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .navbar { background: #16213e !important; border-bottom: 2px solid #4ade80; }
+    .navbar-brand { color: #4ade80 !important; font-weight: bold; font-size: 1.3rem; }
+    .status-bar { background: #0f3460; padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
+    .status-badge { padding: 4px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: 600; }
+    .status-running { background: #166534; color: #4ade80; }
+    .status-paused { background: #854d0e; color: #facc15; }
+    .status-item { font-size: 0.9rem; color: #94a3b8; }
+    .spend-green { color: #4ade80; }
+    .spend-yellow { color: #facc15; }
+    .spend-red { color: #ef4444; }
+    .nav-tabs { border-bottom: 2px solid #334155; }
+    .nav-tabs .nav-link { color: #94a3b8; border: none; padding: 10px 20px; }
+    .nav-tabs .nav-link.active { color: #4ade80; background: transparent; border-bottom: 2px solid #4ade80; }
+    .nav-tabs .nav-link:hover { color: #4ade80; }
+    .table { color: #e0e0e0; }
+    .table thead th { background: #1e293b; color: #4ade80; border-bottom: 1px solid #334155; position: sticky; top: 0; }
+    .table td { border-color: #334155; vertical-align: middle; }
+    .row-must-buy { background: rgba(74, 222, 128, 0.1) !important; }
+    .row-good-deal { background: rgba(74, 222, 128, 0.05) !important; }
+    .row-fair { background: rgba(250, 204, 21, 0.05) !important; }
+    .row-suspicious { background: rgba(239, 68, 68, 0.1) !important; }
+    .badge-sent { background: #3b82f6; }
+    .badge-replied { background: #22c55e; }
+    .badge-no_response { background: #6b7280; }
+    .badge-failed { background: #ef4444; }
+    .expand-btn { cursor: pointer; background: none; border: 1px solid #334155; color: #94a3b8; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; }
+    .expand-btn:hover { color: #4ade80; border-color: #4ade80; }
+    .ai-details { background: #0f172a; padding: 10px 15px; font-size: 0.85rem; }
+    .card-custom { background: #16213e; border: 1px solid #334155; }
+    .refresh-indicator { font-size: 0.75rem; color: #64748b; }
+    a { color: #60a5fa; }
+    a:hover { color: #93bbfd; }
+    .tab-content { min-height: 400px; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark">
+    <div class="container-fluid">
+      <span class="navbar-brand">&#x1F0CF; Pokemon Card Agent</span>
+      <span class="refresh-indicator" id="refreshIndicator">Last updated: just now</span>
+    </div>
+  </nav>
+
+  <div class="status-bar" id="statusBar">
+    <span><span class="status-badge status-running" id="statusBadge">Running</span></span>
+    <span class="status-item" id="uptimeDisplay">Uptime: --</span>
+    <span class="status-item" id="lastScanDisplay">Last scan: --</span>
+    <span class="status-item" id="spendDisplay">API spend: $0.00 / $5.00</span>
+  </div>
+
+  <div class="container-fluid mt-3">
+    <ul class="nav nav-tabs" role="tablist">
+      <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#dealsTab">Deals</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#outreachTab">Outreach</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#watchlistTab">Watchlist</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#spendTab">API Spend</a></li>
+    </ul>
+
+    <div class="tab-content mt-3">
+      <!-- Deals Tab -->
+      <div class="tab-pane fade show active" id="dealsTab">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr>
+              <th></th><th>Card Name</th><th>Price</th><th>Market</th><th>Discount</th><th>Grade</th><th>Source</th><th>Seller</th><th>Link</th><th>Found</th>
+            </tr></thead>
+            <tbody id="dealsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Outreach Tab -->
+      <div class="tab-pane fade" id="outreachTab">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr>
+              <th>Target Name</th><th>Type</th><th>Method</th><th>Status</th><th>Date</th>
+            </tr></thead>
+            <tbody id="outreachBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Watchlist Tab -->
+      <div class="tab-pane fade" id="watchlistTab">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr>
+              <th>Card Name</th><th>Set</th><th>Max Price</th>
+            </tr></thead>
+            <tbody id="watchlistBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- API Spend Tab -->
+      <div class="tab-pane fade" id="spendTab">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr>
+              <th>Service</th><th>Calls Today</th><th>Spend Today</th><th>Spend This Month</th>
+            </tr></thead>
+            <tbody id="spendBody"></tbody>
+          </table>
+          <p class="mt-2 text-muted" id="projectedCost"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let lastUpdate = Date.now();
+
+    function gradeClass(grade) {
+      const map = { 'must-buy': 'row-must-buy', 'good-deal': 'row-good-deal', 'fair': 'row-fair', 'suspicious': 'row-suspicious' };
+      return map[grade] || '';
+    }
+
+    function statusBadge(status) {
+      const cls = { sent: 'badge-sent', replied: 'badge-replied', no_response: 'badge-no_response', failed: 'badge-failed' };
+      return `<span class="badge ${cls[status] || 'bg-secondary'}">${status}</span>`;
+    }
+
+    function spendColor(percent) {
+      if (percent < 50) return 'spend-green';
+      if (percent < 80) return 'spend-yellow';
+      return 'spend-red';
+    }
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '--';
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return `${mins}m ago`;
+      return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
+    }
+
+    async function fetchJSON(url) {
+      try { const r = await fetch(url); return await r.json(); } catch { return null; }
+    }
+
+    async function refresh() {
+      // Status
+      const status = await fetchJSON('/api/status');
+      if (status) {
+        document.getElementById('statusBadge').textContent = status.paused ? 'Paused' : 'Running';
+        document.getElementById('statusBadge').className = `status-badge ${status.paused ? 'status-paused' : 'status-running'}`;
+        document.getElementById('uptimeDisplay').textContent = `Uptime: ${status.uptime}`;
+        document.getElementById('lastScanDisplay').textContent = `Last scan: ${timeAgo(status.lastScrape)}`;
+      }
+
+      // Spend
+      const spend = await fetchJSON('/api/spend');
+      if (spend) {
+        const pct = spend.cap > 0 ? (spend.dailyTotal / spend.cap * 100) : 0;
+        const el = document.getElementById('spendDisplay');
+        el.textContent = `API spend: $${spend.dailyTotal.toFixed(2)} / $${spend.cap.toFixed(2)}`;
+        el.className = `status-item ${spendColor(pct)}`;
+      }
+
+      // Deals
+      const deals = await fetchJSON('/api/deals?limit=20');
+      if (deals) {
+        const tbody = document.getElementById('dealsBody');
+        tbody.innerHTML = deals.map((d, i) => {
+          const redFlags = d.red_flags ? JSON.parse(d.red_flags || '[]') : [];
+          return `<tr class="${gradeClass(d.deal_grade)}">
+            <td><button class="expand-btn" onclick="toggleDetail(${i})">+</button></td>
+            <td>${esc(d.card_name)}</td>
+            <td>$${d.price?.toFixed(2) || '--'}</td>
+            <td>${d.tcg_market_price ? '$' + d.tcg_market_price.toFixed(2) : '--'}</td>
+            <td>${d.discount_percent ? Math.round(d.discount_percent) + '%' : '--'}</td>
+            <td>${esc(d.deal_grade || 'ungraded')}</td>
+            <td>${esc(d.source)}</td>
+            <td>${esc(d.seller_name || '--')}</td>
+            <td><a href="${esc(d.url)}" target="_blank">View</a></td>
+            <td>${timeAgo(d.found_at)}</td>
+          </tr>
+          <tr class="ai-details" id="detail-${i}" style="display:none">
+            <td colspan="10">
+              <strong>AI:</strong> ${esc(d.ai_summary || 'Not analyzed')}<br>
+              <strong>Red flags:</strong> ${redFlags.length ? esc(redFlags.join(', ')) : 'None'}
+            </td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Outreach
+      const outreach = await fetchJSON('/api/outreach?limit=20');
+      if (outreach) {
+        document.getElementById('outreachBody').innerHTML = outreach.map(o =>
+          `<tr>
+            <td>${esc(o.target_name)}</td>
+            <td>${esc(o.target_type)}</td>
+            <td>${esc(o.contact_method)}</td>
+            <td>${statusBadge(o.status)}</td>
+            <td>${timeAgo(o.sent_at)}</td>
+          </tr>`
+        ).join('');
+      }
+
+      // Watchlist
+      const watchlist = await fetchJSON('/api/watchlist');
+      if (watchlist) {
+        document.getElementById('watchlistBody').innerHTML = watchlist.map(c =>
+          `<tr>
+            <td>${esc(c.name)}</td>
+            <td>${esc(c.set || 'Any')}</td>
+            <td>$${c.maxPrice}</td>
+          </tr>`
+        ).join('');
+      }
+
+      // Spend tab
+      if (spend) {
+        const services = {};
+        (spend.today || []).forEach(s => {
+          services[s.service] = { callsToday: s.calls, spendToday: s.spend, spendMonth: 0 };
+        });
+        (spend.month || []).forEach(s => {
+          if (!services[s.service]) services[s.service] = { callsToday: 0, spendToday: 0, spendMonth: 0 };
+          services[s.service].spendMonth = s.spend;
+        });
+
+        let totalToday = 0, totalMonth = 0;
+        const rows = Object.entries(services).map(([name, data]) => {
+          totalToday += data.spendToday;
+          totalMonth += data.spendMonth;
+          return `<tr>
+            <td>${esc(name)}</td>
+            <td>${data.callsToday}</td>
+            <td>$${data.spendToday.toFixed(4)}</td>
+            <td>$${data.spendMonth.toFixed(4)}</td>
+          </tr>`;
+        }).join('');
+
+        document.getElementById('spendBody').innerHTML = rows +
+          `<tr class="fw-bold"><td>Total</td><td></td><td>$${totalToday.toFixed(4)}</td><td>$${totalMonth.toFixed(4)}</td></tr>`;
+
+        const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+        const dayOfMonth = new Date().getDate();
+        const projected = dayOfMonth > 0 ? (totalMonth / dayOfMonth * daysInMonth) : 0;
+        document.getElementById('projectedCost').textContent =
+          `Projected monthly cost at current rate: $${projected.toFixed(2)} (estimate)`;
+      }
+
+      lastUpdate = Date.now();
+    }
+
+    function toggleDetail(i) {
+      const el = document.getElementById('detail-' + i);
+      el.style.display = el.style.display === 'none' ? '' : 'none';
+    }
+
+    function esc(s) {
+      if (!s) return '';
+      const d = document.createElement('div');
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+
+    // Update refresh indicator
+    setInterval(() => {
+      const secs = Math.floor((Date.now() - lastUpdate) / 1000);
+      document.getElementById('refreshIndicator').textContent = `Last updated: ${secs}s ago`;
+    }, 5000);
+
+    // Auto-refresh every 60s
+    setInterval(refresh, 60000);
+    refresh();
+  </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "name": "pokemon-card-agent",
+  "version": "1.0.0",
+  "description": "Autonomous Pokemon TCG card deal hunting agent running on OpenClaw",
+  "main": "tools/startup.js",
+  "scripts": {
+    "start": "node tools/startup.js",
+    "dashboard": "node tools/dashboard/dashboard-cli.js start",
+    "test:db": "node tools/db/database.test.js",
+    "test:tcg": "node tools/scraper-engine/tcgplayer.test.js",
+    "test:ebay": "node tools/scraper-engine/ebay.test.js",
+    "test:analyzer": "node tools/analyzer/cardAnalyzer.test.js",
+    "test:telegram": "node tools/telegram-client/telegram.test.js",
+    "test:email": "node tools/resend-client/emailOutreach.test.js",
+    "test:voice": "node tools/bland-client/voiceOutreach.test.js",
+    "test:dashboard": "node tools/dashboard/dashboard.test.js",
+    "backup": "node tools/backup-db.js"
+  },
+  "keywords": [
+    "pokemon",
+    "tcg",
+    "cards",
+    "agent",
+    "openclaw"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.79.0",
+    "axios": "^1.13.6",
+    "better-sqlite3": "^12.8.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "node-telegram-bot-api": "^0.67.0",
+    "p-queue": "^9.1.0",
+    "puppeteer": "^24.39.1",
+    "resend": "^6.9.4",
+    "winston": "^3.19.0"
+  }
+}

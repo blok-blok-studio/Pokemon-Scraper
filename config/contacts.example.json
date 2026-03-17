@@ -1,0 +1,6 @@
+[
+  { "name": "GameStop Cards", "email": "example@test.com", "type": "card_shop", "phone": null, "timezone": null },
+  { "name": "Local Pawn Exchange", "email": "example2@test.com", "type": "pawn_shop", "phone": "+15551234567", "timezone": "America/Denver" },
+  { "name": "FB Seller Mike", "email": "example3@test.com", "type": "facebook_seller", "phone": null, "timezone": null },
+  { "name": "CardMarket Online", "email": "example4@test.com", "type": "online_seller", "phone": null, "timezone": null }
+]

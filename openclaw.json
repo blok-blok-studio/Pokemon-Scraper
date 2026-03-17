@@ -1,0 +1,42 @@
+{
+  "agents": {
+    "defaults": {
+      "model": "anthropic/claude-sonnet-4-20250514"
+    }
+  },
+  "skills": {
+    "entries": {
+      "pokemon-scraper": { "enabled": true },
+      "tcg-price-check": { "enabled": true },
+      "card-analyzer": { "enabled": true },
+      "deal-alerts": { "enabled": true },
+      "email-outreach": { "enabled": true, "env": { "RESEND_API_KEY": "RESEND_API_KEY" } },
+      "voice-outreach": { "enabled": true, "env": { "BLAND_API_KEY": "BLAND_API_KEY" } },
+      "watchlist-manager": { "enabled": true },
+      "spend-tracker": { "enabled": true },
+      "agent-dashboard": { "enabled": true }
+    }
+  },
+  "gateway": {
+    "bind": "loopback",
+    "port": 18789
+  },
+  "crons": {
+    "scrape-cycle": {
+      "schedule": "*/30 * * * *",
+      "task": "Run the scrape cycle: first check daily spend via spend-tracker, then scrape all sources using pokemon-scraper skill, analyze new listings with card-analyzer skill, and alert on deals via deal-alerts skill. If spend is over 80% of cap, only scrape watchlist cards."
+    },
+    "outreach-cycle": {
+      "schedule": "0 10 * * *",
+      "task": "Run the daily outreach cycle: check daily spend, then email all eligible contacts using email-outreach skill, then call eligible contacts using voice-outreach skill. Respect all cooldowns and daily limits from config."
+    },
+    "daily-summary": {
+      "schedule": "0 20 * * *",
+      "task": "Compile and send the daily summary via deal-alerts skill. Include: total cards scanned, deals found, best deal, outreach activity, API spend breakdown, and projected monthly cost."
+    },
+    "database-backup": {
+      "schedule": "0 3 * * *",
+      "task": "Run database backup by executing: node tools/backup-db.js"
+    }
+  }
+}

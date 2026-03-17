@@ -1,0 +1,9 @@
+.env
+node_modules
+*.db
+/data
+/logs
+.DS_Store
+config/config.json
+config/watchlist.json
+config/contacts.json
