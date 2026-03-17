@@ -7,3 +7,8 @@ node_modules
 config/config.json
 config/watchlist.json
 config/contacts.json
+
+# CRM
+crm/.env.local
+crm/.next
+crm/node_modules

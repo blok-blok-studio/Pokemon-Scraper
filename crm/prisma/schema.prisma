@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+model CardListing {
+  id              Int       @id @default(autoincrement())
+  localId         Int       @unique @map("local_id")
+  source          String
+  title           String?
+  cardName        String    @map("card_name")
+  setName         String?   @map("set_name")
+  condition       String?
+  price           Float
+  tcgMarketPrice  Float?    @map("tcg_market_price")
+  discountPercent Float?    @map("discount_percent")
+  url             String    @unique
+  sellerName      String?   @map("seller_name")
+  sellerContact   String?   @map("seller_contact")
+  dealGrade       String?   @map("deal_grade")
+  aiSummary       String?   @map("ai_summary")
+  redFlags        String?   @map("red_flags")
+  foundAt         DateTime  @default(now()) @map("found_at")
+  alerted         Int       @default(0)
+  pipelineStage   String    @default("new") @map("pipeline_stage")
+  sellerId        Int?      @map("seller_id")
+  seller          Seller?   @relation(fields: [sellerId], references: [id])
+
+  @@index([pipelineStage])
+  @@index([sellerName])
+  @@index([dealGrade])
+  @@map("card_listings")
+}
+
+model OutreachLog {
+  id            Int       @id @default(autoincrement())
+  localId       Int       @unique @map("local_id")
+  targetName    String    @map("target_name")
+  targetType    String    @map("target_type")
+  contactMethod String    @map("contact_method")
+  contactInfo   String    @map("contact_info")
+  subject       String?
+  messageSent   String?   @map("message_sent")
+  status        String    @default("sent")
+  sentAt        DateTime  @default(now()) @map("sent_at")
+  updatedAt     DateTime? @map("updated_at")
+  pipelineStage String    @default("pending") @map("pipeline_stage")
+  approved      Boolean   @default(false)
+  sellerId      Int?      @map("seller_id")
+  seller        Seller?   @relation(fields: [sellerId], references: [id])
+
+  @@index([pipelineStage])
+  @@index([contactInfo])
+  @@map("outreach_log")
+}
+
+model PriceHistory {
+  id         Int      @id @default(autoincrement())
+  localId    Int      @unique @map("local_id")
+  cardName   String   @map("card_name")
+  setName    String?  @map("set_name")
+  source     String
+  price      Float
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  @@index([cardName])
+  @@map("price_history")
+}
+
+model ApiUsage {
+  id               Int      @id @default(autoincrement())
+  localId          Int      @unique @map("local_id")
+  service          String
+  endpoint         String?
+  tokensIn         Int?     @map("tokens_in")
+  tokensOut        Int?     @map("tokens_out")
+  estimatedCostUsd Float?   @map("estimated_cost_usd")
+  calledAt         DateTime @default(now()) @map("called_at")
+
+  @@index([service])
+  @@index([calledAt])
+  @@map("api_usage")
+}
+
+model Seller {
+  id              Int            @id @default(autoincrement())
+  name            String         @unique
+  contactEmail    String?        @map("contact_email")
+  contactPhone    String?        @map("contact_phone")
+  type            String?
+  trustScore      Float?         @map("trust_score")
+  trustReasoning  String?        @map("trust_reasoning")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  listings        CardListing[]
+  outreach        OutreachLog[]
+
+  @@map("sellers")
+}
+
+model Note {
+  id         Int      @id @default(autoincrement())
+  body       String
+  entityType String   @map("entity_type")
+  entityId   Int      @map("entity_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("notes")
+}
+
+model Task {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  dueDate     DateTime? @map("due_date")
+  completed   Boolean   @default(false)
+  completedAt DateTime? @map("completed_at")
+  entityType  String?   @map("entity_type")
+  entityId    Int?      @map("entity_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([dueDate, completed])
+  @@map("tasks")
+}
+
+model Watchlist {
+  id        Int      @id @default(autoincrement())
+  cardName  String   @map("card_name")
+  setName   String?  @map("set_name")
+  maxPrice  Float?   @map("max_price")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("watchlist")
+}
+
+model SyncCursor {
+  id                Int      @id @default(autoincrement())
+  tableName         String   @unique @map("table_name")
+  lastSyncedLocalId Int      @default(0) @map("last_synced_local_id")
+  lastSyncedAt      DateTime @default(now()) @map("last_synced_at")
+
+  @@map("sync_cursors")
+}

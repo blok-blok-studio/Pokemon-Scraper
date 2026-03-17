@@ -37,6 +37,10 @@
     "database-backup": {
       "schedule": "0 3 * * *",
       "task": "Run database backup by executing: node tools/backup-db.js"
+    },
+    "cloud-sync": {
+      "schedule": "*/5 * * * *",
+      "task": "Sync local data to cloud CRM by executing: node tools/sync/cloudSync.js"
     }
   }
 }
