@@ -15,7 +15,7 @@ export async function PATCH(
   if (body.entityId !== undefined) data.entityId = body.entityId
 
   const task = await prisma.task.update({
-    where: { id: params.id },
+    where: { id: parseInt(params.id) },
     data
   })
   return NextResponse.json(task)
@@ -25,6 +25,6 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  await prisma.task.delete({ where: { id: params.id } })
+  await prisma.task.delete({ where: { id: parseInt(params.id) } })
   return NextResponse.json({ deleted: true })
 }

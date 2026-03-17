@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const where: any = {}
   if (completed !== null) where.completed = completed === 'true'
   if (entityType) where.entityType = entityType
-  if (entityId) where.entityId = entityId
+  if (entityId) where.entityId = parseInt(entityId)
 
   const tasks = await prisma.task.findMany({
     where,

@@ -13,7 +13,7 @@ export async function PATCH(
   if (body.active !== undefined) data.active = body.active
 
   const item = await prisma.watchlist.update({
-    where: { id: params.id },
+    where: { id: parseInt(params.id) },
     data
   })
   return NextResponse.json(item)
@@ -23,6 +23,6 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  await prisma.watchlist.delete({ where: { id: params.id } })
+  await prisma.watchlist.delete({ where: { id: parseInt(params.id) } })
   return NextResponse.json({ deleted: true })
 }

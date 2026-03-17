@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   }
 
   const notes = await prisma.note.findMany({
-    where: { entityType, entityId },
+    where: { entityType, entityId: parseInt(entityId) },
     orderBy: { createdAt: 'desc' }
   })
   return NextResponse.json(notes)

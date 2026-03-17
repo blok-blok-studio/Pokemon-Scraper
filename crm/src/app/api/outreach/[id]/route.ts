@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const outreach = await prisma.outreachLog.findUnique({
-    where: { id: params.id },
+    where: { id: parseInt(params.id) },
     include: { seller: true }
   })
   if (!outreach) {
@@ -26,7 +26,7 @@ export async function PATCH(
   if (body.sellerId !== undefined) data.sellerId = body.sellerId
 
   const updated = await prisma.outreachLog.update({
-    where: { id: params.id },
+    where: { id: parseInt(params.id) },
     data,
     include: { seller: true }
   })
