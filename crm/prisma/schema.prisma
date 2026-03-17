@@ -8,6 +8,10 @@ datasource db {
   directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
+// Note: Vercel Postgres/Neon automatically provides both env vars above.
+// If using a standard Postgres, set POSTGRES_PRISMA_URL to your connection string
+// and POSTGRES_URL_NON_POOLING to the same (or a direct, non-pooled URL).
+
 model CardListing {
   id              Int       @id @default(autoincrement())
   localId         Int       @unique @map("local_id")
