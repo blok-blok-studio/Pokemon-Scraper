@@ -1,32 +1,56 @@
-import { prisma } from '@/lib/prisma'
+'use client'
+
 import { formatCurrency, formatPercent, gradeColor, stageColor, timeAgo } from '@/lib/utils'
+import { useLiveData, LiveIndicator } from '@/hooks/use-live-data'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { DealActions } from './deal-actions'
 import { NotesSection } from '@/components/notes-section'
 
-export const dynamic = 'force-dynamic'
+interface Deal {
+  id: number
+  cardName: string | null
+  title: string
+  setName: string | null
+  price: number
+  tcgMarketPrice: number | null
+  discountPercent: number | null
+  dealGrade: string | null
+  pipelineStage: string
+  condition: string | null
+  source: string
+  url: string | null
+  aiSummary: string | null
+  redFlags: string | null
+  foundAt: string
+  seller: { id: number; name: string; trustScore: number | null } | null
+}
 
-export default async function DealDetail({ params }: { params: { id: string } }) {
-  const deal = await prisma.cardListing.findUnique({
-    where: { id: parseInt(params.id) },
-    include: { seller: true }
-  })
+interface PricePoint {
+  id: number
+  source: string
+  price: number
+  recordedAt: string
+}
 
-  if (!deal) notFound()
+export default function DealDetail() {
+  const params = useParams()
+  const id = params.id as string
 
-  const priceHistory = await prisma.priceHistory.findMany({
-    where: { cardName: deal.cardName },
-    orderBy: { recordedAt: 'desc' },
-    take: 20
-  })
+  const { data: deal, lastUpdated, refresh } = useLiveData<Deal>(`/api/deals/${id}`)
+  const { data: priceHistory } = useLiveData<PricePoint[]>(`/api/deals/${id}/prices`, { interval: 60000 })
+
+  if (!deal) return <div className="text-gray-400">Loading...</div>
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Link href="/deals" className="hover:text-brand">Deals</Link>
-        <span>/</span>
-        <span className="text-white">{deal.cardName || 'Listing'}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <Link href="/deals" className="hover:text-brand">Deals</Link>
+          <span>/</span>
+          <span className="text-white">{deal.cardName || 'Listing'}</span>
+        </div>
+        <LiveIndicator lastUpdated={lastUpdated} />
       </div>
 
       <div className="bg-surface-secondary rounded-xl border border-gray-700 p-6">
@@ -40,7 +64,7 @@ export default async function DealDetail({ params }: { params: { id: string } })
               <span className="text-xs text-gray-400">{deal.source}</span>
             </div>
           </div>
-          <DealActions dealId={deal.id} currentStage={deal.pipelineStage} />
+          <DealActions dealId={deal.id} currentStage={deal.pipelineStage} onUpdate={refresh} />
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-700">
@@ -91,7 +115,7 @@ export default async function DealDetail({ params }: { params: { id: string } })
         )}
       </div>
 
-      {priceHistory.length > 0 && (
+      {priceHistory && priceHistory.length > 0 && (
         <div className="bg-surface-secondary rounded-xl border border-gray-700 p-5">
           <h2 className="font-semibold mb-4">Price History</h2>
           <div className="space-y-2">

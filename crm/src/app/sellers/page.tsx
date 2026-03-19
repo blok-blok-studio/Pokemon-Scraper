@@ -1,20 +1,29 @@
-import { prisma } from '@/lib/prisma'
+'use client'
+
 import { timeAgo } from '@/lib/utils'
+import { useLiveData, LiveIndicator } from '@/hooks/use-live-data'
 import Link from 'next/link'
 
-export const dynamic = 'force-dynamic'
+interface Seller {
+  id: number
+  name: string
+  type: string | null
+  trustScore: number | null
+  contactEmail: string | null
+  contactPhone: string | null
+  createdAt: string
+  _count: { listings: number; outreach: number }
+}
 
-export default async function SellersPage() {
-  const sellers = await prisma.seller.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: {
-      _count: { select: { listings: true, outreach: true } }
-    }
-  })
+export default function SellersPage() {
+  const { data: sellers, lastUpdated } = useLiveData<Seller[]>('/api/sellers')
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Sellers</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Sellers</h1>
+        <LiveIndicator lastUpdated={lastUpdated} />
+      </div>
 
       <div className="bg-surface-secondary rounded-xl border border-gray-700 overflow-hidden">
         <table className="w-full text-sm">
@@ -30,7 +39,7 @@ export default async function SellersPage() {
             </tr>
           </thead>
           <tbody>
-            {sellers.map(s => (
+            {(sellers || []).map(s => (
               <tr key={s.id} className="border-b border-gray-700/50 hover:bg-gray-700/20">
                 <td className="p-3">
                   <Link href={`/sellers/${s.id}`} className="font-medium hover:text-brand">{s.name}</Link>
@@ -51,7 +60,8 @@ export default async function SellersPage() {
             ))}
           </tbody>
         </table>
-        {sellers.length === 0 && <p className="p-6 text-center text-gray-500">No sellers yet — they are auto-created when deals sync</p>}
+        {!sellers && <div className="text-gray-400 text-center py-8">Loading...</div>}
+        {sellers && sellers.length === 0 && <p className="p-6 text-center text-gray-500">No sellers yet — they are auto-created when deals sync</p>}
       </div>
     </div>
   )

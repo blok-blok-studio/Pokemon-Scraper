@@ -1,28 +1,54 @@
-import { prisma } from '@/lib/prisma'
+'use client'
+
 import { formatCurrency, gradeColor, stageColor, timeAgo } from '@/lib/utils'
+import { useLiveData, LiveIndicator } from '@/hooks/use-live-data'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { NotesSection } from '@/components/notes-section'
 
-export const dynamic = 'force-dynamic'
+interface SellerDetail {
+  id: number
+  name: string
+  type: string | null
+  trustScore: number | null
+  trustReasoning: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+  createdAt: string
+  listings: {
+    id: number
+    cardName: string
+    source: string
+    price: number
+    dealGrade: string | null
+    foundAt: string
+  }[]
+  outreach: {
+    id: number
+    contactMethod: string
+    contactInfo: string
+    pipelineStage: string
+    sentAt: string
+  }[]
+}
 
-export default async function SellerDetail({ params }: { params: { id: string } }) {
-  const seller = await prisma.seller.findUnique({
-    where: { id: parseInt(params.id) },
-    include: {
-      listings: { orderBy: { foundAt: 'desc' }, take: 20 },
-      outreach: { orderBy: { sentAt: 'desc' }, take: 10 }
-    }
-  })
+export default function SellerDetailPage() {
+  const params = useParams()
+  const id = params.id as string
 
-  if (!seller) notFound()
+  const { data: seller, lastUpdated } = useLiveData<SellerDetail>(`/api/sellers/${id}`)
+
+  if (!seller) return <div className="text-gray-400">Loading...</div>
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Link href="/sellers" className="hover:text-brand">Sellers</Link>
-        <span>/</span>
-        <span className="text-white">{seller.name}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <Link href="/sellers" className="hover:text-brand">Sellers</Link>
+          <span>/</span>
+          <span className="text-white">{seller.name}</span>
+        </div>
+        <LiveIndicator lastUpdated={lastUpdated} />
       </div>
 
       <div className="bg-surface-secondary rounded-xl border border-gray-700 p-6">

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { formatCurrency } from '@/lib/utils'
+import { useLiveData, LiveIndicator } from '@/hooks/use-live-data'
 
 interface SpendData {
   today: number
@@ -12,11 +12,7 @@ interface SpendData {
 }
 
 export default function SpendPage() {
-  const [data, setData] = useState<SpendData | null>(null)
-
-  useEffect(() => {
-    fetch('/api/spend').then(r => r.json()).then(setData)
-  }, [])
+  const { data, lastUpdated } = useLiveData<SpendData>('/api/spend')
 
   if (!data) return <div className="text-gray-400">Loading...</div>
 
@@ -30,7 +26,10 @@ export default function SpendPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">API Spend</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">API Spend</h1>
+        <LiveIndicator lastUpdated={lastUpdated} />
+      </div>
 
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-surface-secondary rounded-xl border border-gray-700 p-4">
@@ -54,10 +53,7 @@ export default function SpendPage() {
             <div key={s.service} className="flex items-center gap-4">
               <span className="w-28 text-sm font-medium truncate">{s.service}</span>
               <div className="flex-1 bg-gray-700/50 rounded-full h-4 overflow-hidden">
-                <div
-                  className="bg-brand h-full rounded-full"
-                  style={{ width: `${Math.max((s.cost / (data.month || 1)) * 100, 2)}%` }}
-                />
+                <div className="bg-brand h-full rounded-full" style={{ width: `${Math.max((s.cost / (data.month || 1)) * 100, 2)}%` }} />
               </div>
               <span className="text-sm font-medium w-20 text-right">{formatCurrency(s.cost)}</span>
               <span className="text-xs text-gray-400 w-20 text-right">{s.calls} calls</span>

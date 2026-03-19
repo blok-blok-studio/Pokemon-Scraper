@@ -11,7 +11,7 @@
       "card-analyzer": { "enabled": true },
       "deal-alerts": { "enabled": true },
       "email-outreach": { "enabled": true, "env": { "RESEND_API_KEY": "RESEND_API_KEY" } },
-      "voice-outreach": { "enabled": true, "env": { "BLAND_API_KEY": "BLAND_API_KEY" } },
+      "voice-outreach": { "enabled": true, "env": { "DEEPGRAM_API_KEY": "DEEPGRAM_API_KEY", "TWILIO_ACCOUNT_SID": "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN": "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER": "TWILIO_PHONE_NUMBER" } },
       "watchlist-manager": { "enabled": true },
       "spend-tracker": { "enabled": true },
       "agent-dashboard": { "enabled": true }

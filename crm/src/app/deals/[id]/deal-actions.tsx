@@ -1,12 +1,10 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 const stages = ['new', 'reviewing', 'approved', 'purchased', 'passed']
 
-export function DealActions({ dealId, currentStage }: { dealId: number; currentStage: string }) {
-  const router = useRouter()
+export function DealActions({ dealId, currentStage, onUpdate }: { dealId: number; currentStage: string; onUpdate?: () => void }) {
   const [loading, setLoading] = useState(false)
 
   async function updateStage(stage: string) {
@@ -16,7 +14,7 @@ export function DealActions({ dealId, currentStage }: { dealId: number; currentS
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pipelineStage: stage })
     })
-    router.refresh()
+    onUpdate?.()
     setLoading(false)
   }
 

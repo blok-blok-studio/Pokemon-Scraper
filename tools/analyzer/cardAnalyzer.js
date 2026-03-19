@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const dotenv = require('dotenv');
 const db = require('../db/database');
+const { autoAdvancePipeline } = require('../automation/engine');
 const { createChildLogger } = require('../logger');
 
 dotenv.config();
@@ -84,18 +85,39 @@ async function analyzeBatch(listings, database) {
       log.info(`API usage: ${tokensIn} in, ${tokensOut} out, ~$${estimatedCost.toFixed(6)}`);
 
       const responseText = response.content[0].text.trim();
-      const analyses = JSON.parse(responseText);
+      let analyses;
+      try {
+        analyses = JSON.parse(responseText);
+      } catch (parseErr) {
+        log.error(`JSON parse failed. Raw response: ${responseText.substring(0, 500)}`);
+        throw parseErr;
+      }
+
+      if (!Array.isArray(analyses)) {
+        log.error(`Expected array, got ${typeof analyses}. Raw: ${responseText.substring(0, 200)}`);
+        throw new Error('Response is not an array');
+      }
 
       // Update database with results
       for (const analysis of analyses) {
+        if (!analysis.url || !analysis.dealGrade) {
+          log.warn(`Skipping incomplete analysis: ${JSON.stringify(analysis).substring(0, 100)}`);
+          continue;
+        }
         db.updateListingAnalysis(database, analysis.url, {
           deal_grade: analysis.dealGrade,
-          ai_summary: analysis.summary,
+          ai_summary: analysis.summary || '',
           red_flags: JSON.stringify(analysis.redFlags || [])
         });
       }
 
-      return { analyses, tokensIn, tokensOut, estimatedCost };
+      // Auto-advance pipeline based on AI grade
+      const advanced = autoAdvancePipeline(database, analyses);
+      if (advanced > 0) {
+        log.info(`Auto-advanced ${advanced} deals in pipeline`);
+      }
+
+      return { analyses, tokensIn, tokensOut, estimatedCost, pipelineAdvanced: advanced };
 
     } catch (err) {
       log.error(`Analysis failed: ${err.message}`);

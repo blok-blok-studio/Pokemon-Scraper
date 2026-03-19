@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
+import { useLiveData, LiveIndicator } from '@/hooks/use-live-data'
 
 interface WatchlistItem {
   id: number
@@ -12,31 +13,22 @@ interface WatchlistItem {
 }
 
 export default function WatchlistPage() {
-  const [items, setItems] = useState<WatchlistItem[]>([])
+  const { data: items, lastUpdated, refresh } = useLiveData<WatchlistItem[]>('/api/watchlist')
   const [cardName, setCardName] = useState('')
   const [setName, setSetName] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
 
-  useEffect(() => {
-    fetch('/api/watchlist').then(r => r.json()).then(setItems)
-  }, [])
-
   async function addItem() {
     if (!cardName.trim()) return
-    const res = await fetch('/api/watchlist', {
+    await fetch('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cardName,
-        setName: setName || null,
-        maxPrice: maxPrice ? parseFloat(maxPrice) : null
-      })
+      body: JSON.stringify({ cardName, setName: setName || null, maxPrice: maxPrice ? parseFloat(maxPrice) : null })
     })
-    const item = await res.json()
-    setItems([item, ...items])
     setCardName('')
     setSetName('')
     setMaxPrice('')
+    refresh()
   }
 
   async function toggleActive(id: number, active: boolean) {
@@ -45,22 +37,25 @@ export default function WatchlistPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: !active })
     })
-    setItems(prev => prev.map(i => i.id === id ? { ...i, active: !active } : i))
+    refresh()
   }
 
   async function deleteItem(id: number) {
     await fetch(`/api/watchlist/${id}`, { method: 'DELETE' })
-    setItems(prev => prev.filter(i => i.id !== id))
+    refresh()
   }
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-bold">Watchlist</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Watchlist</h1>
+        <LiveIndicator lastUpdated={lastUpdated} />
+      </div>
 
       <div className="bg-surface-secondary rounded-xl border border-gray-700 p-4">
         <p className="text-sm text-gray-400 mb-3">Add a card to watch for deals</p>
         <div className="flex gap-2">
-          <input value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Card name *" className="flex-1 bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
+          <input value={cardName} onChange={e => setCardName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addItem()} placeholder="Card name *" className="flex-1 bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
           <input value={setName} onChange={e => setSetName(e.target.value)} placeholder="Set (optional)" className="w-40 bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
           <input value={maxPrice} onChange={e => setMaxPrice(e.target.value)} type="number" placeholder="Max $" className="w-24 bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
           <button onClick={addItem} disabled={!cardName.trim()} className="px-4 py-2 bg-brand text-black text-sm font-medium rounded-lg hover:bg-brand/80 disabled:opacity-50">Add</button>
@@ -68,7 +63,7 @@ export default function WatchlistPage() {
       </div>
 
       <div className="space-y-2">
-        {items.map(item => (
+        {(items || []).map(item => (
           <div key={item.id} className={`bg-surface-secondary rounded-xl border border-gray-700 p-4 flex items-center gap-4 ${!item.active ? 'opacity-50' : ''}`}>
             <div className="flex-1">
               <p className="font-medium">{item.cardName}</p>
@@ -83,7 +78,8 @@ export default function WatchlistPage() {
             <button onClick={() => deleteItem(item.id)} className="text-xs text-gray-500 hover:text-red-400">Remove</button>
           </div>
         ))}
-        {items.length === 0 && <p className="text-gray-500 text-center py-8">No cards on watchlist</p>}
+        {!items && <div className="text-gray-400 text-center py-8">Loading...</div>}
+        {items && items.length === 0 && <p className="text-gray-500 text-center py-8">No cards on watchlist</p>}
       </div>
     </div>
   )

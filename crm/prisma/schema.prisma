@@ -38,6 +38,9 @@ model CardListing {
   @@index([pipelineStage])
   @@index([sellerName])
   @@index([dealGrade])
+  @@index([cardName, foundAt])
+  @@index([sellerId, foundAt])
+  @@index([foundAt(sort: Desc)])
   @@map("card_listings")
 }
 
@@ -60,6 +63,8 @@ model OutreachLog {
 
   @@index([pipelineStage])
   @@index([contactInfo])
+  @@index([sentAt(sort: Desc)])
+  @@index([sellerId, sentAt])
   @@map("outreach_log")
 }
 
@@ -73,6 +78,8 @@ model PriceHistory {
   recordedAt DateTime @default(now()) @map("recorded_at")
 
   @@index([cardName])
+  @@index([cardName, recordedAt])
+  @@index([recordedAt(sort: Desc)])
   @@map("price_history")
 }
 
@@ -143,6 +150,27 @@ model Watchlist {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("watchlist")
+}
+
+model AutomationTask {
+  id          Int       @id @default(autoincrement())
+  localId     Int       @unique @map("local_id")
+  taskType    String    @map("task_type")
+  entityType  String?   @map("entity_type")
+  entityId    Int?      @map("entity_id")
+  title       String
+  description String?
+  status      String    @default("pending")
+  priority    String    @default("normal")
+  dueDate     DateTime? @map("due_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([status])
+  @@index([priority])
+  @@index([dueDate, status])
+  @@index([taskType])
+  @@map("automation_tasks")
 }
 
 model SyncCursor {

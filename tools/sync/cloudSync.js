@@ -10,19 +10,50 @@ const log = createChildLogger('cloud-sync');
 const CRM_URL = process.env.CRM_SYNC_URL;
 const API_KEY = process.env.CRM_SYNC_API_KEY;
 const BATCH_SIZE = 100;
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
 
 const TABLES = [
   { name: 'card_listings', sqliteTable: 'card_listings', endpoint: 'listings' },
   { name: 'outreach_log', sqliteTable: 'outreach_log', endpoint: 'outreach' },
   { name: 'price_history', sqliteTable: 'price_history', endpoint: 'prices' },
   { name: 'api_usage', sqliteTable: 'api_usage', endpoint: 'usage' },
+  { name: 'automation_tasks', sqliteTable: 'automation_tasks', endpoint: 'tasks' },
 ];
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(fn, context) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isRetryable = err.code === 'ECONNRESET' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ECONNABORTED' ||
+        (err.response && err.response.status >= 500);
+
+      if (!isRetryable || attempt === MAX_RETRIES) {
+        throw err;
+      }
+
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      log.warn(`${context}: attempt ${attempt} failed (${err.message}), retrying in ${delay}ms...`);
+      await sleep(delay);
+    }
+  }
+}
+
 async function getCursors() {
-  const res = await axios.get(`${CRM_URL}/api/sync/status`, {
-    headers: { Authorization: `Bearer ${API_KEY}` }
-  });
-  return res.data;
+  return fetchWithRetry(async () => {
+    const res = await axios.get(`${CRM_URL}/api/sync/status`, {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+      timeout: 10000,
+    });
+    return res.data;
+  }, 'getCursors');
 }
 
 async function syncTable(database, table, cursor) {
@@ -40,16 +71,23 @@ async function syncTable(database, table, cursor) {
   let batch = rows;
 
   while (batch.length > 0) {
-    const res = await axios.post(
-      `${CRM_URL}/api/sync/${table.endpoint}`,
-      { records: batch },
-      { headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' } }
-    );
+    const res = await fetchWithRetry(async () => {
+      return axios.post(
+        `${CRM_URL}/api/sync/${table.endpoint}`,
+        { records: batch },
+        {
+          headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+          timeout: 30000,
+        }
+      );
+    }, `sync ${table.name}`);
 
+    if (res.data.synced !== batch.length) {
+      log.warn(`${table.name}: expected ${batch.length} synced but CRM reported ${res.data.synced}`);
+    }
     totalSynced += res.data.synced;
     log.info(`${table.name}: synced ${res.data.synced} records (cursor: ${res.data.cursor})`);
 
-    // Check for more
     const nextRows = database.prepare(
       `SELECT *, id as local_id FROM ${table.sqliteTable} WHERE id > ? ORDER BY id ASC LIMIT ?`
     ).all(res.data.cursor, BATCH_SIZE);
@@ -75,8 +113,12 @@ async function main() {
 
     let totalSynced = 0;
     for (const table of TABLES) {
-      const synced = await syncTable(database, table, cursors[table.name] || 0);
-      totalSynced += synced;
+      try {
+        const synced = await syncTable(database, table, cursors[table.name] || 0);
+        totalSynced += synced;
+      } catch (err) {
+        log.error(`Failed to sync ${table.name} after ${MAX_RETRIES} attempts: ${err.message}`);
+      }
     }
 
     log.info(`Cloud sync complete: ${totalSynced} total records synced`);

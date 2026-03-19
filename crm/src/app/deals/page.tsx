@@ -1,44 +1,56 @@
-import { prisma } from '@/lib/prisma'
+'use client'
+
+import { useState } from 'react'
 import { formatCurrency, formatPercent, gradeColor, stageColor, timeAgo } from '@/lib/utils'
+import { useLiveData, LiveIndicator } from '@/hooks/use-live-data'
 import Link from 'next/link'
 
-export const dynamic = 'force-dynamic'
+interface Deal {
+  id: number
+  cardName: string | null
+  title: string
+  setName: string | null
+  price: number
+  tcgMarketPrice: number | null
+  discountPercent: number | null
+  dealGrade: string | null
+  pipelineStage: string
+  source: string
+  foundAt: string
+  seller: { id: number; name: string } | null
+}
 
-export default async function DealsPage({
-  searchParams,
-}: {
-  searchParams: { grade?: string; stage?: string; source?: string }
-}) {
-  const where: any = {}
-  if (searchParams.grade) where.dealGrade = searchParams.grade
-  if (searchParams.stage) where.pipelineStage = searchParams.stage
-  if (searchParams.source) where.source = searchParams.source
+const grades = ['must-buy', 'good-deal', 'fair', 'overpriced', 'suspicious']
+const stages = ['new', 'reviewing', 'approved', 'purchased', 'passed']
 
-  const deals = await prisma.cardListing.findMany({
-    where,
-    orderBy: { foundAt: 'desc' },
-    take: 100,
-    include: { seller: true }
-  })
+export default function DealsPage() {
+  const [gradeFilter, setGradeFilter] = useState('')
+  const [stageFilter, setStageFilter] = useState('')
 
-  const grades = ['must-buy', 'good-deal', 'fair', 'overpriced', 'suspicious']
-  const stages = ['new', 'reviewing', 'approved', 'purchased', 'passed']
+  const params = new URLSearchParams({ limit: '100' })
+  if (gradeFilter) params.set('grade', gradeFilter)
+  if (stageFilter) params.set('stage', stageFilter)
+
+  const { data: deals, lastUpdated } = useLiveData<Deal[]>(`/api/deals?${params}`)
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Deals</h1>
-        <p className="text-sm text-gray-400">{deals.length} results</p>
+        <div className="flex items-center gap-3">
+          <LiveIndicator lastUpdated={lastUpdated} />
+          <p className="text-sm text-gray-400">{deals ? `${deals.length} results` : ''}</p>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link href="/deals" className={`px-3 py-1 rounded-full text-xs border ${!searchParams.grade && !searchParams.stage ? 'border-brand text-brand' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}>All</Link>
+        <button onClick={() => { setGradeFilter(''); setStageFilter('') }} className={`px-3 py-1 rounded-full text-xs border ${!gradeFilter && !stageFilter ? 'border-brand text-brand' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}>All</button>
         {grades.map(g => (
-          <Link key={g} href={`/deals?grade=${g}`} className={`px-3 py-1 rounded-full text-xs border ${searchParams.grade === g ? 'border-brand text-brand' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}>{g}</Link>
+          <button key={g} onClick={() => { setGradeFilter(g); setStageFilter('') }} className={`px-3 py-1 rounded-full text-xs border ${gradeFilter === g ? 'border-brand text-brand' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}>{g}</button>
         ))}
         <span className="border-l border-gray-600 mx-1" />
         {stages.map(s => (
-          <Link key={s} href={`/deals?stage=${s}`} className={`px-3 py-1 rounded-full text-xs border ${searchParams.stage === s ? 'border-brand text-brand' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}>{s}</Link>
+          <button key={s} onClick={() => { setStageFilter(s); setGradeFilter('') }} className={`px-3 py-1 rounded-full text-xs border ${stageFilter === s ? 'border-brand text-brand' : 'border-gray-600 text-gray-400 hover:border-gray-400'}`}>{s}</button>
         ))}
       </div>
 
@@ -57,7 +69,7 @@ export default async function DealsPage({
             </tr>
           </thead>
           <tbody>
-            {deals.map(d => (
+            {(deals || []).map(d => (
               <tr key={d.id} className="border-b border-gray-700/50 hover:bg-gray-700/20">
                 <td className="p-3">
                   <Link href={`/deals/${d.id}`} className="hover:text-brand">
@@ -76,7 +88,8 @@ export default async function DealsPage({
             ))}
           </tbody>
         </table>
-        {deals.length === 0 && <p className="p-6 text-center text-gray-500">No deals found</p>}
+        {!deals && <div className="text-gray-400 text-center py-8">Loading...</div>}
+        {deals && deals.length === 0 && <p className="p-6 text-center text-gray-500">No deals found</p>}
       </div>
     </div>
   )

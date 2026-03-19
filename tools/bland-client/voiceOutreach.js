@@ -1,23 +1,28 @@
-const axios = require('axios');
+const twilio = require('twilio');
 const Anthropic = require('@anthropic-ai/sdk');
 const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 const db = require('../db/database');
+const { createFollowUpTask } = require('../automation/engine');
 const { createChildLogger } = require('../logger');
+const { createCallServer } = require('./callServer');
 
 dotenv.config();
 
 const log = createChildLogger('voice-outreach');
 const anthropic = new Anthropic();
 
-const BLAND_API_URL = 'https://api.bland.ai/v1';
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
 
 function getWatchlistNames(limit = 3) {
   try {
     const watchlistPath = path.join(__dirname, '..', '..', 'config', 'watchlist.json');
     const watchlist = JSON.parse(fs.readFileSync(watchlistPath, 'utf8'));
-    return watchlist.slice(0, limit).map(c => c.name).join(', ');
+    return watchlist.slice(0, limit).map(c => c.name || c.cardName).join(', ');
   } catch {
     return 'Charizard VMAX, Pikachu VMAX, Umbreon VMAX';
   }
@@ -45,7 +50,7 @@ function getScript(target) {
 }
 
 function isBusinessHours(timezone) {
-  if (!timezone) return true; // If no timezone, assume OK
+  if (!timezone) return true;
   try {
     const now = new Date();
     const formatter = new Intl.DateTimeFormat('en-US', {
@@ -60,7 +65,11 @@ function isBusinessHours(timezone) {
   }
 }
 
-async function analyzeTranscript(transcript, database) {
+async function analyzeTranscript(transcriptEntries, database) {
+  const formatted = transcriptEntries
+    .map(e => `${e.role === 'agent' ? 'Agent' : 'Seller'}: ${e.text}`)
+    .join('\n');
+
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -68,7 +77,7 @@ async function analyzeTranscript(transcript, database) {
       system: 'Analyze this phone call transcript between an AI caller and a store. Return JSON only: {"interested": true/false, "hasCards": true/false, "followUpNeeded": true/false, "callbackRequested": true/false, "notes": "brief summary"}',
       messages: [{
         role: 'user',
-        content: `Analyze this call transcript:\n${transcript}`
+        content: `Analyze this call transcript:\n${formatted}`
       }]
     });
 
@@ -123,84 +132,128 @@ async function makeCall(target, database) {
   }
 
   const script = getScript(target);
+  const agentName = process.env.AGENT_NAME || 'a Pokemon card collector';
   log.info(`Calling ${target.name} at ${target.phone}...`);
 
-  // Make call via Bland.ai
-  const callResponse = await axios.post(`${BLAND_API_URL}/calls`, {
-    phone_number: target.phone,
-    task: script,
-    voice: 'maya',
-    max_duration: 120,
-    record: true,
-    wait_for_greeting: true
-  }, {
-    headers: {
-      'Authorization': process.env.BLAND_API_KEY,
-      'Content-Type': 'application/json'
-    }
-  });
+  // Start the real-time call server
+  const callSrv = createCallServer({ script, maxDuration: 120, agentName });
+  const port = await callSrv.start();
 
-  const callId = callResponse.data?.call_id;
-  if (!callId) {
-    throw new Error('No call_id returned from Bland.ai');
-  }
+  // Twilio needs a publicly reachable URL for the TwiML webhook.
+  // Set VOICE_SERVER_URL to your public URL (e.g. via ngrok or server IP).
+  const serverBaseUrl = process.env.VOICE_SERVER_URL || `http://localhost:${port}`;
+  const twimlUrl = `${serverBaseUrl}/twiml`;
 
-  log.info(`Call initiated: ${callId}`);
+  try {
+    // Initiate outbound call via Twilio
+    const call = await twilioClient.calls.create({
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: target.phone,
+      url: twimlUrl,
+      method: 'POST',
+      timeout: 30,
+    });
 
-  // Estimate cost ($0.09/min, assume 2 min average)
-  const estimatedCallCost = 0.18;
-  db.logApiUsage(database, {
-    service: 'bland',
-    endpoint: 'calls',
-    estimated_cost_usd: estimatedCallCost
-  });
+    log.info(`Call initiated: ${call.sid}`);
 
-  // Wait for call to complete (poll every 10s, max 3 min)
-  let transcript = null;
-  let callStatus = 'in_progress';
-  for (let i = 0; i < 18; i++) {
-    await new Promise(r => setTimeout(r, 10000));
+    // Log costs: Twilio ~$0.014/min + Deepgram STT ~$0.0043/min + TTS ~$0.015/min
+    // Assume ~2 min average call = ~$0.07 total
+    db.logApiUsage(database, {
+      service: 'twilio',
+      endpoint: 'calls',
+      estimated_cost_usd: 0.03
+    });
+    db.logApiUsage(database, {
+      service: 'deepgram',
+      endpoint: 'stt+tts',
+      estimated_cost_usd: 0.04
+    });
+
+    // Wait for call to complete (max 3 minutes)
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Call timeout')), 180000)
+    );
 
     try {
-      const statusRes = await axios.get(`${BLAND_API_URL}/calls/${callId}`, {
-        headers: { 'Authorization': process.env.BLAND_API_KEY }
-      });
-
-      callStatus = statusRes.data?.status || 'unknown';
-      if (callStatus === 'completed' || callStatus === 'failed') {
-        transcript = statusRes.data?.transcript || statusRes.data?.concatenated_transcript;
-        break;
+      await Promise.race([callSrv.waitForCallEnd(), timeout]);
+    } catch (timeoutErr) {
+      // On timeout, terminate the Twilio call to prevent orphaned calls
+      log.warn(`Call timed out, terminating Twilio call ${call.sid}`);
+      try {
+        await twilioClient.calls(call.sid).update({ status: 'completed' });
+      } catch (killErr) {
+        log.error(`Failed to terminate Twilio call: ${killErr.message}`);
       }
-    } catch (err) {
-      log.warn(`Poll error: ${err.message}`);
+      throw timeoutErr;
     }
+
+    const transcriptEntries = callSrv.getTranscript();
+    const callStatus = transcriptEntries.length > 1 ? 'completed' : 'no_answer';
+
+    // Analyze transcript if we got a conversation
+    let analysis = { interested: false, hasCards: false, followUpNeeded: false, notes: 'No conversation' };
+    if (transcriptEntries.length > 1) {
+      analysis = await analyzeTranscript(transcriptEntries, database);
+    }
+
+    // Format transcript for logging
+    const fullTranscript = transcriptEntries
+      .map(e => `${e.role === 'agent' ? 'Agent' : 'Seller'}: ${e.text}`)
+      .join('\n');
+
+    // Log outreach with full transcript + analysis
+    const messageParts = [`--- SCRIPT ---\n${script}`];
+    if (fullTranscript) messageParts.push(`\n--- TRANSCRIPT ---\n${fullTranscript}`);
+    if (analysis.notes) messageParts.push(`\n--- AI ANALYSIS ---\n${analysis.notes}`);
+
+    const outreachResult = db.insertOutreach(database, {
+      target_name: target.name,
+      target_type: target.type,
+      contact_method: 'voice',
+      contact_info: target.phone,
+      subject: `Voice call to ${target.name} (${target.type})`,
+      message_sent: messageParts.join('\n'),
+      status: callStatus
+    });
+
+    // Auto-create follow-up tasks based on analysis
+    if (analysis.interested || analysis.followUpNeeded || analysis.callbackRequested || analysis.hasCards) {
+      const tasksCreated = createFollowUpTask(database, {
+        targetName: target.name,
+        contactMethod: 'voice',
+        contactInfo: target.phone,
+        analysis,
+        outreachId: outreachResult.lastInsertRowid,
+      });
+      log.info(`Auto-created ${tasksCreated} follow-up task(s) for ${target.name}`);
+    }
+
+    log.info(`Call to ${target.name} completed: ${callStatus}`);
+
+    return {
+      success: true,
+      callSid: call.sid,
+      status: callStatus,
+      analysis,
+      transcript: fullTranscript ? fullTranscript.substring(0, 500) : null
+    };
+  } catch (err) {
+    log.error(`Call failed: ${err.message}`);
+
+    db.insertOutreach(database, {
+      target_name: target.name,
+      target_type: target.type,
+      contact_method: 'voice',
+      contact_info: target.phone,
+      subject: `Voice call to ${target.name} (failed)`,
+      message_sent: `--- SCRIPT ---\n${script}\n\n--- ERROR ---\n${err.message}`,
+      status: 'failed'
+    });
+
+    return { success: false, error: err.message };
+  } finally {
+    await callSrv.stop();
   }
-
-  // Analyze transcript
-  let analysis = { interested: false, hasCards: false, followUpNeeded: false, notes: 'No transcript available' };
-  if (transcript) {
-    analysis = await analyzeTranscript(transcript, database);
-  }
-
-  // Log outreach
-  db.insertOutreach(database, {
-    target_name: target.name,
-    target_type: target.type,
-    contact_method: 'voice',
-    contact_info: target.phone,
-    message_sent: script,
-    status: callStatus
-  });
-
-  log.info(`Call to ${target.name} completed: ${callStatus}`);
-
-  return {
-    success: true,
-    callId,
-    status: callStatus,
-    analysis,
-    transcript: transcript ? transcript.substring(0, 500) : null
-  };
 }
 
 function previewScript(target) {

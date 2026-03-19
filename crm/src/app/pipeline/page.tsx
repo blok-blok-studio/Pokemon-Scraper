@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { formatCurrency, gradeColor, timeAgo } from '@/lib/utils'
+import { useLiveData, LiveIndicator } from '@/hooks/use-live-data'
 import Link from 'next/link'
 
 const STAGES = ['new', 'reviewing', 'approved', 'purchased', 'passed']
@@ -25,22 +26,26 @@ interface Deal {
 }
 
 export default function PipelinePage() {
-  const [deals, setDeals] = useState<Deal[]>([])
+  const { data: deals, lastUpdated, refresh } = useLiveData<Deal[]>('/api/deals?limit=200')
   const [dragging, setDragging] = useState<number | null>(null)
-
-  useEffect(() => {
-    fetch('/api/deals?limit=200')
-      .then(r => r.json())
-      .then(setDeals)
-  }, [])
+  const [localStages, setLocalStages] = useState<Record<number, string>>({})
 
   async function moveToStage(dealId: number, stage: string) {
-    await fetch(`/api/deals/${dealId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pipelineStage: stage })
-    })
-    setDeals(prev => prev.map(d => d.id === dealId ? { ...d, pipelineStage: stage } : d))
+    const previousStages = { ...localStages }
+    setLocalStages(prev => ({ ...prev, [dealId]: stage }))
+    try {
+      const res = await fetch(`/api/deals/${dealId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pipelineStage: stage })
+      })
+      if (!res.ok) throw new Error('PATCH failed')
+      refresh()
+    } catch {
+      // Revert optimistic update on failure
+      setLocalStages(previousStages)
+      refresh()
+    }
   }
 
   function handleDragStart(e: React.DragEvent, dealId: number) {
@@ -56,12 +61,20 @@ export default function PipelinePage() {
     }
   }
 
+  const displayDeals = (deals || []).map(d => ({
+    ...d,
+    pipelineStage: localStages[d.id] || d.pipelineStage,
+  }))
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Pipeline</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Pipeline</h1>
+        <LiveIndicator lastUpdated={lastUpdated} />
+      </div>
       <div className="flex gap-4 overflow-x-auto pb-4">
         {STAGES.map(stage => {
-          const stageDeals = deals.filter(d => d.pipelineStage === stage)
+          const stageDeals = displayDeals.filter(d => d.pipelineStage === stage)
           return (
             <div
               key={stage}

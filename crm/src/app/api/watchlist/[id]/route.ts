@@ -1,28 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
+function parseId(id: string): number | null {
+  const parsed = parseInt(id)
+  return isNaN(parsed) ? null : parsed
+}
+
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const body = await request.json()
-  const data: any = {}
-  if (body.cardName !== undefined) data.cardName = body.cardName
-  if (body.setName !== undefined) data.setName = body.setName
-  if (body.maxPrice !== undefined) data.maxPrice = body.maxPrice
-  if (body.active !== undefined) data.active = body.active
+  try {
+    const { id } = await params
+    const numId = parseId(id)
+    if (numId === null) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
-  const item = await prisma.watchlist.update({
-    where: { id: parseInt(params.id) },
-    data
-  })
-  return NextResponse.json(item)
+    const body = await request.json()
+    const data: any = {}
+    if (body.cardName !== undefined) data.cardName = body.cardName
+    if (body.setName !== undefined) data.setName = body.setName
+    if (body.maxPrice !== undefined) data.maxPrice = body.maxPrice
+    if (body.active !== undefined) data.active = body.active
+
+    const item = await prisma.watchlist.update({
+      where: { id: numId },
+      data
+    })
+    return NextResponse.json(item)
+  } catch (error) {
+    console.error('PATCH /api/watchlist/[id] error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  await prisma.watchlist.delete({ where: { id: parseInt(params.id) } })
-  return NextResponse.json({ deleted: true })
+  try {
+    const { id } = await params
+    const numId = parseId(id)
+    if (numId === null) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+
+    await prisma.watchlist.delete({ where: { id: numId } })
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error('DELETE /api/watchlist/[id] error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { timeAgo } from '@/lib/utils'
+import { useLiveData } from '@/hooks/use-live-data'
 
 interface Note {
   id: number
@@ -10,26 +11,19 @@ interface Note {
 }
 
 export function NotesSection({ entityType, entityId }: { entityType: string; entityId: number }) {
-  const [notes, setNotes] = useState<Note[]>([])
+  const { data: notes, refresh } = useLiveData<Note[]>(`/api/notes?entityType=${entityType}&entityId=${entityId}`)
   const [text, setText] = useState('')
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    fetch(`/api/notes?entityType=${entityType}&entityId=${entityId}`)
-      .then(r => r.json())
-      .then(setNotes)
-  }, [entityType, entityId])
 
   async function addNote() {
     if (!text.trim()) return
     setSaving(true)
-    const res = await fetch('/api/notes', {
+    await fetch('/api/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: text, entityType, entityId })
     })
-    const note = await res.json()
-    setNotes([note, ...notes])
+    refresh()
     setText('')
     setSaving(false)
   }
@@ -54,13 +48,13 @@ export function NotesSection({ entityType, entityId }: { entityType: string; ent
         </button>
       </div>
       <div className="space-y-3">
-        {notes.map(n => (
+        {(notes || []).map(n => (
           <div key={n.id} className="py-2 border-b border-gray-700/50 last:border-0">
             <p className="text-sm">{n.body}</p>
             <p className="text-xs text-gray-500 mt-1">{timeAgo(n.createdAt)}</p>
           </div>
         ))}
-        {notes.length === 0 && <p className="text-sm text-gray-500">No notes yet</p>}
+        {(!notes || notes.length === 0) && <p className="text-sm text-gray-500">No notes yet</p>}
       </div>
     </div>
   )
