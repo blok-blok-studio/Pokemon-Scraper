@@ -46,6 +46,8 @@
     "node-telegram-bot-api": "^0.67.0",
     "p-queue": "^9.1.0",
     "puppeteer": "^24.39.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "resend": "^6.9.4",
     "twilio": "^5.13.0",
     "winston": "^3.19.0",

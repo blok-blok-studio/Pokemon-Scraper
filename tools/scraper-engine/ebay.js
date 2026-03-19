@@ -1,11 +1,10 @@
-const puppeteer = require('puppeteer');
 const { scraperQueue } = require('../rate-limiter/rateLimiter');
 const { createChildLogger } = require('../logger');
 const proxyManager = require('./proxyManager');
+const { launchBrowser, setupPage, dismissPopups, randomDelay } = require('./browserLauncher');
 
 const log = createChildLogger('ebay-scraper');
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const MAX_PROXY_SWITCHES = 3;
 
 async function sleep(ms) {
@@ -26,22 +25,9 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
       allListings = [];
       log.info(`Searching eBay for "${query}" (max $${maxPrice || 'any'}) — attempt ${attempts}${proxy ? ` via ${proxy.label}` : ' (direct)'}`);
 
-      const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
-      if (proxy) {
-        launchArgs.push(`--proxy-server=${proxy.server}`);
-      }
-
-      browser = await puppeteer.launch({
-        headless: 'new',
-        args: launchArgs,
-      });
-
-      const page = await browser.newPage();
-      if (proxy && proxy.username) {
-        await page.authenticate({ username: proxy.username, password: proxy.password });
-      }
-      await page.setUserAgent(USER_AGENT);
-      await page.setViewport({ width: 1920, height: 1080 });
+      browser = await launchBrowser(proxy ? proxy.server : null);
+      const page = await setupPage(browser, proxy);
+      await dismissPopups(page);
 
       for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
         const params = new URLSearchParams({
@@ -57,7 +43,7 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
         await scraperQueue.add(async () => {
           log.info(`Scraping page ${pageNum}: ${url}`);
           await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-          await sleep(2000);
+          await randomDelay(2000, 4000);
         });
 
         // Block detection with proxy switching

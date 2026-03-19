@@ -1,11 +1,9 @@
-const puppeteer = require('puppeteer');
 const { scraperQueue } = require('../rate-limiter/rateLimiter');
 const { createChildLogger } = require('../logger');
 const proxyManager = require('./proxyManager');
+const { launchBrowser, setupPage, dismissPopups, randomDelay } = require('./browserLauncher');
 
 const log = createChildLogger('tcgplayer');
-
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -22,25 +20,15 @@ async function lookupPrice(cardName, setName) {
       attempts++;
       log.info(`Looking up price for "${cardName}"${setName ? ` (${setName})` : ''} — attempt ${attempts}${proxy ? ` via ${proxy.label}` : ' (direct)'}`);
 
-      const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
-      if (proxy) launchArgs.push(`--proxy-server=${proxy.server}`);
-
-      browser = await puppeteer.launch({
-        headless: 'new',
-        args: launchArgs,
-      });
-      const page = await browser.newPage();
-      if (proxy && proxy.username) {
-        await page.authenticate({ username: proxy.username, password: proxy.password });
-      }
-      await page.setUserAgent(USER_AGENT);
-      await page.setViewport({ width: 1920, height: 1080 });
+      browser = await launchBrowser(proxy ? proxy.server : null);
+      const page = await setupPage(browser, proxy);
+      await dismissPopups(page);
 
       const searchQuery = setName ? `${cardName} ${setName}` : cardName;
       const searchUrl = `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(searchQuery)}&view=grid`;
 
       await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-      await sleep(2000);
+      await randomDelay(2000, 4000);
 
       // Block detection
       if (await proxyManager.detectBlock(page)) {
@@ -56,47 +44,61 @@ async function lookupPrice(cardName, setName) {
 
       if (proxy) proxyManager.reportSuccess(proxy._proxyUrl);
 
-      // Try to find product listings and market price
-      const result = await page.evaluate((targetCard) => {
-        // Look for search results
-        const listings = document.querySelectorAll('.search-result__content, .product-card, [class*="product"]');
+      // Find the first product link on search results
+      const productUrl = await page.evaluate(() => {
+        const link = document.querySelector('a[href*="/product/"]');
+        return link ? link.href : null;
+      });
 
-        // Try to find the market price from the page
-        const priceElements = document.querySelectorAll('.product-card__market-price, [class*="market-price"], [class*="MarketPrice"], .price-point__data');
+      if (!productUrl) {
+        log.warn(`No product found on TCGPlayer for "${cardName}"`);
+        await browser.close();
+        browser = null;
+        if (attempts < maxAttempts) {
+          await sleep(Math.pow(3, attempts) * 1000);
+          continue;
+        }
+        return null;
+      }
+
+      // Navigate to the product page for accurate market price
+      log.info(`Navigating to product page: ${productUrl}`);
+      await page.goto(productUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      await randomDelay(2000, 4000);
+
+      // Block detection on product page
+      if (await proxyManager.detectBlock(page)) {
+        log.warn('Block detected on TCGPlayer product page');
+        if (proxy) proxyManager.reportBlocked(proxy._proxyUrl);
+        if (attempts < maxAttempts) {
+          await browser.close().catch(() => {});
+          browser = null;
+          await sleep(Math.pow(3, attempts) * 1000);
+          continue;
+        }
+      }
+
+      const result = await page.evaluate(() => {
+        const allText = document.body.innerText;
+
+        // Get the main market price (first "Market Price" on the product page)
+        // Handle formats: "Market Price\n\t\n$1,822.24" and "Market Price:$270.55"
+        const marketMatches = allText.match(/Market Price[\s:]*\$([\d,]+\.?\d*)/gi) || [];
 
         let marketPrice = null;
-        let productUrl = null;
-        let foundName = null;
-
-        // Try first product link
-        const firstLink = document.querySelector('.search-result__content a, .product-card a, a[href*="/product/"]');
-        if (firstLink) {
-          productUrl = firstLink.href;
-          foundName = firstLink.textContent?.trim();
-        }
-
-        // Try to find market price text
-        const allText = document.body.innerText;
-        const marketMatch = allText.match(/Market Price:?\s*\$(\d+\.?\d*)/i) ||
-                           allText.match(/Market\s*\$(\d+\.?\d*)/i);
-        if (marketMatch) {
-          marketPrice = parseFloat(marketMatch[1]);
-        }
-
-        // Also try price elements
-        if (!marketPrice) {
-          for (const el of priceElements) {
-            const text = el.textContent;
-            const match = text.match(/\$(\d+\.?\d*)/);
-            if (match) {
-              marketPrice = parseFloat(match[1]);
-              break;
-            }
+        if (marketMatches.length > 0) {
+          const firstMatch = marketMatches[0].match(/\$([\d,]+\.?\d*)/);
+          if (firstMatch) {
+            marketPrice = parseFloat(firstMatch[1].replace(/,/g, ''));
           }
         }
 
-        return { marketPrice, productUrl, foundName };
-      }, cardName);
+        // Get product name from h1
+        const h1 = document.querySelector('h1');
+        const foundName = h1 ? h1.innerText.trim() : null;
+
+        return { marketPrice, productUrl: window.location.href, foundName };
+      });
 
       await browser.close();
       browser = null;
@@ -107,13 +109,12 @@ async function lookupPrice(cardName, setName) {
           cardName,
           setName: setName || null,
           marketPrice: result.marketPrice,
-          url: result.productUrl || searchUrl,
+          url: result.productUrl || productUrl,
           source: 'tcgplayer'
         };
       }
 
-      // If no market price on search page, try clicking into first result
-      log.warn(`No market price found on search page for "${cardName}"`);
+      log.warn(`No market price found on product page for "${cardName}"`);
 
       if (attempts < maxAttempts) {
         log.warn(`Retrying in ${Math.pow(3, attempts)}s...`);
