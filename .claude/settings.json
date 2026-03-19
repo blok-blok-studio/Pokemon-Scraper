@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx next:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npx vercel:*)",
+      "Bash(node tools/**)",
+      "Bash(node -e:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(wc:*)",
+      "Bash(cat:*)",
+      "Read(/tmp/**)"
+    ]
+  },
+  "hooks": {
+    "preCommit": [
+      {
+        "command": "npx vitest run tests/unit tests/smoke --reporter=verbose",
+        "description": "Run unit + smoke tests before committing"
+      }
+    ]
+  }
+}

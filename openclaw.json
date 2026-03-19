@@ -14,7 +14,11 @@
       "voice-outreach": { "enabled": true, "env": { "DEEPGRAM_API_KEY": "DEEPGRAM_API_KEY", "TWILIO_ACCOUNT_SID": "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN": "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER": "TWILIO_PHONE_NUMBER" } },
       "watchlist-manager": { "enabled": true },
       "spend-tracker": { "enabled": true },
-      "agent-dashboard": { "enabled": true }
+      "agent-dashboard": { "enabled": true },
+      "reply-handler": { "enabled": true, "env": { "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY" } },
+      "data-export": { "enabled": true },
+      "inventory-tracker": { "enabled": true },
+      "system-health": { "enabled": true }
     }
   },
   "gateway": {
@@ -41,6 +45,18 @@
     "cloud-sync": {
       "schedule": "*/5 * * * *",
       "task": "Sync local data to cloud CRM by executing: node tools/sync/cloudSync.js"
+    },
+    "data-pruning": {
+      "schedule": "0 4 * * 0",
+      "task": "Run weekly data pruning to keep database lean: node tools/maintenance/dataPruner.js. This deletes old listings (>90 days), aggregates old price history, cleans completed tasks, and removes old export files."
+    },
+    "health-check": {
+      "schedule": "*/30 * * * *",
+      "task": "Run system health check using system-health skill. Check disk space, memory, database size, log size, stale data, and circuit breaker status. Alert via Telegram if any warnings detected."
+    },
+    "portfolio-update": {
+      "schedule": "0 12 * * *",
+      "task": "Update market prices for all cards in inventory using inventory-tracker skill. Alert via Telegram if any card dropped >20% or gained >50% since purchase."
     }
   }
 }
