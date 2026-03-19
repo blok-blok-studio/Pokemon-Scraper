@@ -14,7 +14,17 @@
     "test:email": "node tools/resend-client/emailOutreach.test.js",
     "test:voice": "node tools/bland-client/voiceOutreach.test.js",
     "test:dashboard": "node tools/dashboard/dashboard.test.js",
-    "backup": "node tools/backup-db.js"
+    "test:proxy": "node tools/scraper-engine/proxyManager.test.js",
+    "test:matcher": "node tools/utils/cardMatcher.test.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:smoke": "vitest run tests/smoke",
+    "test:all": "vitest run",
+    "backup": "node tools/backup-db.js",
+    "export:deals": "node tools/export/export-cli.js deals",
+    "export:outreach": "node tools/export/export-cli.js outreach"
   },
   "keywords": [
     "pokemon",
@@ -26,8 +36,10 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",
+    "@deepgram/sdk": "^5.0.0",
     "axios": "^1.13.6",
     "better-sqlite3": "^12.8.0",
+    "csv-stringify": "^6.7.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "node-cron": "^4.2.1",
@@ -35,6 +47,11 @@
     "p-queue": "^9.1.0",
     "puppeteer": "^24.39.1",
     "resend": "^6.9.4",
-    "winston": "^3.19.0"
+    "twilio": "^5.13.0",
+    "winston": "^3.19.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0"
   }
 }

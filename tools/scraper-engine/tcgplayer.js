@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
 const { scraperQueue } = require('../rate-limiter/rateLimiter');
 const { createChildLogger } = require('../logger');
+const proxyManager = require('./proxyManager');
 
 const log = createChildLogger('tcgplayer');
 
@@ -16,15 +17,22 @@ async function lookupPrice(cardName, setName) {
   const maxAttempts = 3;
 
   while (attempts < maxAttempts) {
+    const proxy = proxyManager.getProxy();
     try {
       attempts++;
-      log.info(`Looking up price for "${cardName}"${setName ? ` (${setName})` : ''} — attempt ${attempts}`);
+      log.info(`Looking up price for "${cardName}"${setName ? ` (${setName})` : ''} — attempt ${attempts}${proxy ? ` via ${proxy.label}` : ' (direct)'}`);
+
+      const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
+      if (proxy) launchArgs.push(`--proxy-server=${proxy.server}`);
 
       browser = await puppeteer.launch({
         headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: launchArgs,
       });
       const page = await browser.newPage();
+      if (proxy && proxy.username) {
+        await page.authenticate({ username: proxy.username, password: proxy.password });
+      }
       await page.setUserAgent(USER_AGENT);
       await page.setViewport({ width: 1920, height: 1080 });
 
@@ -33,6 +41,20 @@ async function lookupPrice(cardName, setName) {
 
       await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
       await sleep(2000);
+
+      // Block detection
+      if (await proxyManager.detectBlock(page)) {
+        log.warn('Block detected on TCGPlayer');
+        if (proxy) proxyManager.reportBlocked(proxy._proxyUrl);
+        if (attempts < maxAttempts) {
+          await browser.close().catch(() => {});
+          browser = null;
+          await sleep(Math.pow(3, attempts) * 1000);
+          continue;
+        }
+      }
+
+      if (proxy) proxyManager.reportSuccess(proxy._proxyUrl);
 
       // Try to find product listings and market price
       const result = await page.evaluate((targetCard) => {

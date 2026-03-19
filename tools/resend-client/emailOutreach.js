@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 const db = require('../db/database');
+const { createFollowUpTask } = require('../automation/engine');
 const { createChildLogger } = require('../logger');
 
 dotenv.config();
@@ -65,7 +66,11 @@ async function generateEmail(target, database) {
     });
   }
 
-  const emailData = JSON.parse(response.content[0].text.trim());
+  let rawText = response.content[0].text.trim();
+  // Strip markdown code blocks if Claude wrapped the JSON
+  const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) rawText = jsonMatch[1].trim();
+  const emailData = JSON.parse(rawText);
 
   // Add CAN-SPAM footer
   emailData.body += '\n\n---\nIf you\'d prefer not to receive messages from me, just reply and let me know.';
@@ -74,70 +79,112 @@ async function generateEmail(target, database) {
 }
 
 async function sendEmail(target, database) {
-  const config = getConfig();
-  const spendCap = parseFloat(process.env.DAILY_API_SPEND_CAP_USD || '5.00');
+  try {
+    const config = getConfig();
+    const spendCap = parseFloat(process.env.DAILY_API_SPEND_CAP_USD || '5.00');
 
-  // Check spend cap
-  const currentSpend = db.getDailyApiSpend(database);
-  if (currentSpend.total_spend >= spendCap) {
-    log.warn('Daily spend cap reached. Skipping email.');
-    return { skipped: true, reason: 'spend_cap_reached' };
+    // Check blocklist
+    try {
+      const { isBlocklisted } = require('./webhookHandler');
+      if (target.email && isBlocklisted(target.email)) {
+        log.warn(`Skipping ${target.email} — on blocklist`);
+        return { skipped: true, reason: 'blocklisted' };
+      }
+    } catch {
+      // webhookHandler may not be loaded yet, continue
+    }
+
+    // Check spend cap
+    const currentSpend = db.getDailyApiSpend(database);
+    if (currentSpend.total_spend >= spendCap) {
+      log.warn('Daily spend cap reached. Skipping email.');
+      return { skipped: true, reason: 'spend_cap_reached' };
+    }
+
+    // Check daily email limit
+    const todayEmails = db.getTodayOutreachCount(database, 'email');
+    if (todayEmails >= config.maxDailyEmails) {
+      log.warn(`Daily email limit reached (${todayEmails}/${config.maxDailyEmails}).`);
+      return { skipped: true, reason: 'daily_limit_reached' };
+    }
+
+    // Check cooldown
+    const history = db.getOutreachHistory(database, target.email, config.emailCooldownDays);
+    if (history.length > 0) {
+      log.info(`Skipping ${target.email} — contacted ${history.length} time(s) within ${config.emailCooldownDays} days`);
+      return { skipped: true, reason: 'cooldown' };
+    }
+
+    // Generate email
+    const emailData = await generateEmail(target, database);
+    log.info(`Generated email for ${target.name}: "${emailData.subject}"`);
+
+    // Send via Resend
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    const result = await resend.emails.send({
+      from: process.env.FROM_EMAIL,
+      to: target.email,
+      replyTo: process.env.REPLY_TO_EMAIL,
+      subject: emailData.subject,
+      text: emailData.body
+    });
+
+    // Log Resend API usage
+    db.logApiUsage(database, {
+      service: 'resend',
+      endpoint: 'emails.send',
+      estimated_cost_usd: 0.001 // Approximate per-email cost
+    });
+
+    // Log outreach
+    const outreachResult = db.insertOutreach(database, {
+      target_name: target.name,
+      target_type: target.type,
+      contact_method: 'email',
+      contact_info: target.email,
+      subject: emailData.subject,
+      message_sent: emailData.body,
+      status: 'sent'
+    });
+
+    // Auto-create follow-up task to check for reply
+    createFollowUpTask(database, {
+      targetName: target.name,
+      contactMethod: 'email',
+      contactInfo: target.email,
+      analysis: { interested: false, followUpNeeded: true, hasCards: false, callbackRequested: false, notes: 'Check for email reply' },
+      outreachId: outreachResult.lastInsertRowid,
+    });
+
+    log.info(`Email sent to ${target.name} (${target.email})`);
+
+    return {
+      success: true,
+      to: target.email,
+      subject: emailData.subject,
+      resendId: result.data?.id
+    };
+  } catch (err) {
+    log.error(`Failed to send email to ${target.name} (${target.email}): ${err.message}`);
+
+    // Still log failed outreach attempt so we don't retry immediately
+    try {
+      db.insertOutreach(database, {
+        target_name: target.name,
+        target_type: target.type,
+        contact_method: 'email',
+        contact_info: target.email,
+        subject: `Failed: Email to ${target.name}`,
+        message_sent: `Error: ${err.message}`,
+        status: 'failed'
+      });
+    } catch (logErr) {
+      log.error(`Failed to log failed outreach: ${logErr.message}`);
+    }
+
+    return { error: true, reason: err.message };
   }
-
-  // Check daily email limit
-  const todayEmails = db.getTodayOutreachCount(database, 'email');
-  if (todayEmails >= config.maxDailyEmails) {
-    log.warn(`Daily email limit reached (${todayEmails}/${config.maxDailyEmails}).`);
-    return { skipped: true, reason: 'daily_limit_reached' };
-  }
-
-  // Check cooldown
-  const history = db.getOutreachHistory(database, target.email, config.emailCooldownDays);
-  if (history.length > 0) {
-    log.info(`Skipping ${target.email} — contacted ${history.length} time(s) within ${config.emailCooldownDays} days`);
-    return { skipped: true, reason: 'cooldown' };
-  }
-
-  // Generate email
-  const emailData = await generateEmail(target, database);
-  log.info(`Generated email for ${target.name}: "${emailData.subject}"`);
-
-  // Send via Resend
-  const resend = new Resend(process.env.RESEND_API_KEY);
-
-  const result = await resend.emails.send({
-    from: process.env.FROM_EMAIL,
-    to: target.email,
-    replyTo: process.env.REPLY_TO_EMAIL,
-    subject: emailData.subject,
-    text: emailData.body
-  });
-
-  // Log Resend API usage
-  db.logApiUsage(database, {
-    service: 'resend',
-    endpoint: 'emails.send',
-    estimated_cost_usd: 0.001 // Approximate per-email cost
-  });
-
-  // Log outreach
-  db.insertOutreach(database, {
-    target_name: target.name,
-    target_type: target.type,
-    contact_method: 'email',
-    contact_info: target.email,
-    message_sent: `Subject: ${emailData.subject}\n\n${emailData.body}`,
-    status: 'sent'
-  });
-
-  log.info(`Email sent to ${target.name} (${target.email})`);
-
-  return {
-    success: true,
-    to: target.email,
-    subject: emailData.subject,
-    resendId: result.data?.id
-  };
 }
 
 async function getEmailStats(database) {

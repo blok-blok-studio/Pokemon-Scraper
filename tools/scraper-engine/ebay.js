@@ -1,10 +1,12 @@
 const puppeteer = require('puppeteer');
 const { scraperQueue } = require('../rate-limiter/rateLimiter');
 const { createChildLogger } = require('../logger');
+const proxyManager = require('./proxyManager');
 
 const log = createChildLogger('ebay-scraper');
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const MAX_PROXY_SWITCHES = 3;
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -15,18 +17,29 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
   let allListings = [];
   let attempts = 0;
   const maxAttempts = 3;
+  let proxySwitches = 0;
 
   while (attempts < maxAttempts) {
+    let proxy = proxyManager.getProxy();
     try {
       attempts++;
-      log.info(`Searching eBay for "${query}" (max $${maxPrice || 'any'}) — attempt ${attempts}`);
+      allListings = [];
+      log.info(`Searching eBay for "${query}" (max $${maxPrice || 'any'}) — attempt ${attempts}${proxy ? ` via ${proxy.label}` : ' (direct)'}`);
+
+      const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
+      if (proxy) {
+        launchArgs.push(`--proxy-server=${proxy.server}`);
+      }
 
       browser = await puppeteer.launch({
         headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: launchArgs,
       });
 
       const page = await browser.newPage();
+      if (proxy && proxy.username) {
+        await page.authenticate({ username: proxy.username, password: proxy.password });
+      }
       await page.setUserAgent(USER_AGENT);
       await page.setViewport({ width: 1920, height: 1080 });
 
@@ -46,6 +59,36 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
           await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
           await sleep(2000);
         });
+
+        // Block detection with proxy switching
+        if (await proxyManager.detectBlock(page)) {
+          log.warn(`Block detected on eBay page ${pageNum}`);
+          if (proxy) proxyManager.reportBlocked(proxy._proxyUrl);
+
+          if (proxySwitches < MAX_PROXY_SWITCHES) {
+            proxySwitches++;
+            const newProxy = proxyManager.getProxy();
+            if (newProxy) {
+              log.info(`Switching to proxy ${newProxy.label}`);
+              await browser.close().catch(() => {});
+              proxy = newProxy;
+              const retryArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
+              retryArgs.push(`--proxy-server=${proxy.server}`);
+              browser = await puppeteer.launch({ headless: 'new', args: retryArgs });
+              const retryPage = await browser.newPage();
+              if (proxy.username) await retryPage.authenticate({ username: proxy.username, password: proxy.password });
+              await retryPage.setUserAgent(USER_AGENT);
+              await retryPage.setViewport({ width: 1920, height: 1080 });
+              await retryPage.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+              // Re-assign page for the evaluate below — but we can't reassign const, so just continue to next attempt
+              continue;
+            }
+          }
+          log.error('Block detected and no proxy available, skipping remaining pages');
+          break;
+        }
+
+        if (proxy) proxyManager.reportSuccess(proxy._proxyUrl);
 
         const pageListings = await page.evaluate(() => {
           const items = [];
@@ -68,9 +111,9 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
               if (!title || title === 'Shop on eBay' || !priceText || !link) return;
 
               // Extract numeric price
-              const priceMatch = priceText.match(/\$(\d+[\.,]?\d*)/);
+              const priceMatch = priceText.match(/\$([\d,]+\.?\d*)/);
               if (!priceMatch) return;
-              const price = parseFloat(priceMatch[1].replace(',', ''));
+              const price = parseFloat(priceMatch[1].replace(/,/g, ''));
 
               // Skip if it looks like a range (auction)
               if (priceText.includes(' to ')) return;

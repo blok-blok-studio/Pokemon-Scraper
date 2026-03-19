@@ -13,7 +13,14 @@ const REQUIRED_KEYS = {
   TELEGRAM_BOT_TOKEN: 'Create via @BotFather on Telegram',
   TELEGRAM_CHAT_ID: 'Get via @userinfobot on Telegram',
   RESEND_API_KEY: 'https://resend.com',
-  BLAND_API_KEY: 'https://bland.ai'
+  FROM_EMAIL: 'Sender email address for outreach (e.g. you@yourdomain.com)',
+  REPLY_TO_EMAIL: 'Reply-to email address for outreach',
+  DEEPGRAM_API_KEY: 'https://deepgram.com',
+  TWILIO_ACCOUNT_SID: 'https://console.twilio.com',
+  TWILIO_AUTH_TOKEN: 'https://console.twilio.com',
+  TWILIO_PHONE_NUMBER: 'https://console.twilio.com/phone-numbers',
+  CRM_SYNC_URL: 'Your Vercel CRM URL (e.g. https://crm-kohl-phi.vercel.app)',
+  CRM_SYNC_API_KEY: 'Must match SYNC_API_KEY in CRM environment'
 };
 
 function validateKeys() {
@@ -32,7 +39,8 @@ function ensureConfigs() {
   const pairs = [
     ['config.example.json', 'config.json'],
     ['watchlist.example.json', 'watchlist.json'],
-    ['contacts.example.json', 'contacts.json']
+    ['contacts.example.json', 'contacts.json'],
+    ['proxies.example.json', 'proxies.json']
   ];
 
   for (const [example, actual] of pairs) {
@@ -120,6 +128,17 @@ async function main() {
   } catch (err) {
     log.error(`Telegram notification failed: ${err.message}`);
     console.error(`  ✗ Telegram failed: ${err.message}`);
+  }
+
+  // Run automation engine on startup (escalations, watchlist trends, due tasks)
+  console.log('  Running automation engine...');
+  try {
+    const automation = require('./automation/engine');
+    const autoResults = await automation.runAll(database);
+    console.log(`  ✓ Automation: ${autoResults.escalated} escalated, ${autoResults.watchlistSuggestions} watchlist suggestions, ${autoResults.tasksDueSoon} tasks due soon`);
+  } catch (err) {
+    log.error(`Automation engine failed: ${err.message}`);
+    console.error(`  ✗ Automation failed: ${err.message}`);
   }
 
   log.info('Pokemon Card Agent started successfully');

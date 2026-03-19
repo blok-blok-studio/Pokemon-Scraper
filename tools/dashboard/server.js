@@ -17,17 +17,36 @@ function createServer() {
 
   app.use(express.static(path.join(__dirname, 'public')));
 
+  // Mount webhook handler
+  try {
+    const webhookHandler = require('../resend-client/webhookHandler');
+    app.use('/webhook', webhookHandler);
+    log.info('Webhook handler mounted at /webhook/email-reply');
+  } catch (err) {
+    log.warn(`Webhook handler not loaded: ${err.message}`);
+  }
+
   app.get('/api/status', (req, res) => {
-    const uptime = Date.now() - startTime;
-    const hours = Math.floor(uptime / 3600000);
-    const minutes = Math.floor((uptime % 3600000) / 60000);
-    res.json({
-      running: true,
-      paused: false,
-      uptime: `${hours}h ${minutes}m`,
-      lastScrape: new Date().toISOString(),
-      nextScrape: new Date(Date.now() + 1800000).toISOString()
-    });
+    try {
+      const { getHealthReport } = require('../maintenance/healthCheck');
+      const health = getHealthReport(database);
+      const uptime = Date.now() - startTime;
+      const hours = Math.floor(uptime / 3600000);
+      const minutes = Math.floor((uptime % 3600000) / 60000);
+      res.json({
+        running: true,
+        paused: false,
+        uptime: `${hours}h ${minutes}m`,
+        lastScrape: health.lastScrapeAt || null,
+        nextScrape: health.lastScrapeAt ? new Date(new Date(health.lastScrapeAt).getTime() + 1800000).toISOString() : null,
+        health,
+      });
+    } catch {
+      const uptime = Date.now() - startTime;
+      const hours = Math.floor(uptime / 3600000);
+      const minutes = Math.floor((uptime % 3600000) / 60000);
+      res.json({ running: true, uptime: `${hours}h ${minutes}m` });
+    }
   });
 
   app.get('/api/stats', (req, res) => {
