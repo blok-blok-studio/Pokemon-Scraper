@@ -2,7 +2,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const db = require('./db/database');
 const { createChildLogger } = require('./logger');
