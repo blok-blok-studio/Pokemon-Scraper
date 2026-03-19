@@ -92,21 +92,45 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
 
         const pageListings = await page.evaluate(() => {
           const items = [];
-          const results = document.querySelectorAll('.s-item, [class*="s-item"]');
+
+          // Try new eBay layout (.s-card) first, fall back to legacy (.s-item)
+          let results = document.querySelectorAll('.s-card');
+          let isNewLayout = results.length > 0;
+
+          if (!isNewLayout) {
+            results = document.querySelectorAll('.s-item, [class*="s-item"]');
+          }
 
           results.forEach(item => {
             try {
-              const titleEl = item.querySelector('.s-item__title, [class*="s-item__title"]');
-              const priceEl = item.querySelector('.s-item__price, [class*="s-item__price"]');
-              const linkEl = item.querySelector('.s-item__link, a[href*="ebay.com/itm/"]');
-              const sellerEl = item.querySelector('.s-item__seller-info-text, [class*="seller"]');
-              const conditionEl = item.querySelector('.SECONDARY_INFO, [class*="condition"]');
+              let title, priceText, link, seller, cond;
 
-              const title = titleEl?.textContent?.trim();
-              const priceText = priceEl?.textContent?.trim();
-              const link = linkEl?.href;
-              const seller = sellerEl?.textContent?.trim() || 'unknown';
-              const cond = conditionEl?.textContent?.trim() || 'Not specified';
+              if (isNewLayout) {
+                // New eBay layout (2025+)
+                const titleEl = item.querySelector('.s-card__title, [class*="s-card__title"]');
+                const priceEl = item.querySelector('.s-card__price, [class*="s-card__price"]');
+                const linkEl = item.querySelector('.s-card__link, a[href*="ebay.com/itm/"]');
+                const subtitleEl = item.querySelector('.s-card__subtitle, [class*="s-card__subtitle"]');
+
+                title = titleEl?.textContent?.trim();
+                priceText = priceEl?.textContent?.trim();
+                link = linkEl?.href;
+                seller = 'unknown';
+                cond = subtitleEl?.textContent?.trim() || 'Not specified';
+              } else {
+                // Legacy eBay layout
+                const titleEl = item.querySelector('.s-item__title, [class*="s-item__title"]');
+                const priceEl = item.querySelector('.s-item__price, [class*="s-item__price"]');
+                const linkEl = item.querySelector('.s-item__link, a[href*="ebay.com/itm/"]');
+                const sellerEl = item.querySelector('.s-item__seller-info-text, [class*="seller"]');
+                const conditionEl = item.querySelector('.SECONDARY_INFO, [class*="condition"]');
+
+                title = titleEl?.textContent?.trim();
+                priceText = priceEl?.textContent?.trim();
+                link = linkEl?.href;
+                seller = sellerEl?.textContent?.trim() || 'unknown';
+                cond = conditionEl?.textContent?.trim() || 'Not specified';
+              }
 
               if (!title || title === 'Shop on eBay' || !priceText || !link) return;
 
@@ -139,7 +163,7 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
 
         // Check if there are more pages
         const hasNextPage = await page.evaluate(() => {
-          return !!document.querySelector('.pagination__next, [class*="pagination__next"]');
+          return !!document.querySelector('.pagination__next, [class*="pagination__next"], a[aria-label="Next page"], [class*="pagination"] a:last-child');
         });
         if (!hasNextPage) break;
       }

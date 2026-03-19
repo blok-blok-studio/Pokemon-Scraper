@@ -8,7 +8,7 @@ const { createFollowUpTask } = require('../automation/engine');
 const { createChildLogger } = require('../logger');
 const { createCallServer } = require('./callServer');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const log = createChildLogger('voice-outreach');
 const anthropic = new Anthropic();

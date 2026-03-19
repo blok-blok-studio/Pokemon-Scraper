@@ -3,7 +3,7 @@ const axios = require('axios');
 const db = require('../db/database');
 const { createChildLogger } = require('../logger');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const log = createChildLogger('cloud-sync');
 

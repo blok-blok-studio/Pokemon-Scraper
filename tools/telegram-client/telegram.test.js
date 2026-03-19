@@ -1,7 +1,7 @@
 const telegram = require('./telegram');
 const dotenv = require('dotenv');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 (async () => {
   console.log('Testing Telegram deal alert...\n');

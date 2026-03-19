@@ -1,7 +1,7 @@
 const telegram = require('./telegram');
 const dotenv = require('dotenv');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const command = process.argv[2];
 const args = process.argv.slice(3);

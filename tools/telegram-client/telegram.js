@@ -5,7 +5,7 @@ const path = require('path');
 const { telegramQueue } = require('../rate-limiter/rateLimiter');
 const { createChildLogger } = require('../logger');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const log = createChildLogger('telegram');
 

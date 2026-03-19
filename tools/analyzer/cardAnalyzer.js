@@ -4,7 +4,7 @@ const db = require('../db/database');
 const { autoAdvancePipeline } = require('../automation/engine');
 const { createChildLogger } = require('../logger');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const log = createChildLogger('card-analyzer');
 const client = new Anthropic();

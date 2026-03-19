@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 const db = require('../db/database');
 const { createChildLogger } = require('../logger');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const log = createChildLogger('dashboard');
 const startTime = Date.now();

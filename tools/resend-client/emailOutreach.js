@@ -7,7 +7,7 @@ const db = require('../db/database');
 const { createFollowUpTask } = require('../automation/engine');
 const { createChildLogger } = require('../logger');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const log = createChildLogger('email-outreach');
 const anthropic = new Anthropic();

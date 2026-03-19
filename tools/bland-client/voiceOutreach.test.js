@@ -2,7 +2,7 @@ const { previewScript, makeCall, getCallStats } = require('./voiceOutreach');
 const db = require('../db/database');
 const dotenv = require('dotenv');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const database = db.init();
 

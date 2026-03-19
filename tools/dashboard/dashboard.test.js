@@ -2,7 +2,7 @@ const { createServer } = require('./server');
 const http = require('http');
 const dotenv = require('dotenv');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const { app, port } = createServer();
 
