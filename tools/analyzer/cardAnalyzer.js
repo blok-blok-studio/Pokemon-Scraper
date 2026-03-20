@@ -2,6 +2,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const dotenv = require('dotenv');
 const db = require('../db/database');
 const { autoAdvancePipeline } = require('../automation/engine');
+const { buildMemoryContext } = require('../memory/memoryManager');
 const { createChildLogger } = require('../logger');
 
 dotenv.config({ override: true });
@@ -59,10 +60,22 @@ async function analyzeBatch(listings, database) {
       attempts++;
       log.info(`Analyzing batch of ${listings.length} listings — attempt ${attempts}`);
 
+      // Inject agent memory into the system prompt
+      let systemPrompt = SYSTEM_PROMPT;
+      try {
+        const memoryContext = buildMemoryContext(database);
+        if (memoryContext) {
+          systemPrompt += memoryContext;
+          log.info('Injected agent memory context into analysis prompt');
+        }
+      } catch (e) {
+        log.warn(`Could not load memory context: ${e.message}`);
+      }
+
       const response = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 2000,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         messages: [{
           role: 'user',
           content: `Analyze these Pokemon card listings:\n${JSON.stringify(listingSummaries, null, 2)}`
@@ -162,6 +175,29 @@ async function analyzeUngraded(database) {
   const goodDeal = allResults.filter(r => r.dealGrade === 'good-deal').length;
 
   log.info(`Analysis complete: ${allResults.length} analyzed, ${mustBuy} must-buy, ${goodDeal} good-deal, ${suspicious} suspicious`);
+
+  // Price-verify good deals that are missing market prices
+  try {
+    const { verifyPrices } = require('../scraper-engine/scrapeAll');
+    const priceResult = await verifyPrices(database, { maxVerifications: 15 });
+    if (priceResult.verified > 0) {
+      log.info(`Price verification: ${priceResult.verified} listings got market prices`);
+    }
+  } catch (e) {
+    log.warn(`Price verification skipped: ${e.message}`);
+  }
+
+  // Extract and store memories from this analysis cycle
+  try {
+    const { extractMemories, buildCycleData } = require('../memory/memoryManager');
+    const cycleData = buildCycleData(database, { analyzed: allResults.length, mustBuy, goodDeal, suspicious, results: allResults });
+    const memResult = await extractMemories(database, cycleData);
+    if (memResult.stored > 0) {
+      log.info(`Memory: stored ${memResult.stored} new insights from this cycle`);
+    }
+  } catch (e) {
+    log.warn(`Memory extraction skipped: ${e.message}`);
+  }
 
   return { analyzed: allResults.length, mustBuy, goodDeal, suspicious, results: allResults };
 }

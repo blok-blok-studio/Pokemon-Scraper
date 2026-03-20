@@ -588,6 +588,80 @@ function startListener() {
     }
   });
 
+  // === Business Finder Commands ===
+
+  bot.onText(/\/find (.+)/, async (msg, match) => {
+    try {
+      const input = match[1].trim();
+      const parts = input.split('--types');
+      const location = parts[0].trim();
+      const types = parts[1] ? parts[1].trim().split(',').map(t => t.trim()) : ['card_shop', 'pawn_shop', 'thrift_store', 'comic_book_store'];
+
+      await bot.sendMessage(msg.chat.id, `🔍 Searching for businesses in ${location}...\nTypes: ${types.join(', ')}\nThis may take a minute.`);
+
+      const { discoverContacts } = require('../outreach/contactPipeline');
+      const result = await discoverContacts(location, { types, maxPerType: 5 });
+
+      let response = `📋 *Contact Discovery: ${location}*\n\n`;
+      response += `Found: ${result.businessesFound} businesses\n`;
+      response += `With email: ${result.newWithEmail}\n`;
+      response += `No email: ${result.noEmailFound}\n`;
+      response += `Duplicates skipped: ${result.duplicatesSkipped}\n`;
+
+      if (result.newContacts.length > 0) {
+        response += '\n✅ *New contacts added:*\n';
+        result.newContacts.forEach(c => {
+          response += `  ${c.name} (${c.type}) — ${c.email}\n`;
+        });
+      }
+
+      if (result.needsManualEmail.length > 0) {
+        response += '\n📞 *Need manual email (have phone):*\n';
+        result.needsManualEmail.slice(0, 10).forEach(c => {
+          response += `  ${c.name} — ${c.phone || 'no phone'}\n`;
+        });
+      }
+
+      await bot.sendMessage(msg.chat.id, response, { parse_mode: 'Markdown' });
+    } catch (err) {
+      log.error(`/find command failed: ${err.message}`);
+      await bot.sendMessage(msg.chat.id, `Error: ${err.message}`);
+    }
+  });
+
+  bot.onText(/\/contacts/, async (msg) => {
+    try {
+      const { loadContacts } = require('../outreach/contactPipeline');
+      const contacts = loadContacts();
+
+      const byType = {};
+      let withEmail = 0;
+      let withoutEmail = 0;
+
+      for (const c of contacts) {
+        byType[c.type] = (byType[c.type] || 0) + 1;
+        if (c.email) withEmail++;
+        else withoutEmail++;
+      }
+
+      let response = `📋 *Contact List*\n\n`;
+      response += `Total: ${contacts.length}\n`;
+      response += `With email: ${withEmail}\n`;
+      response += `Without email: ${withoutEmail}\n\n`;
+      response += `*By type:*\n`;
+      for (const [type, count] of Object.entries(byType).sort((a, b) => b[1] - a[1])) {
+        response += `  ${type.replace(/_/g, ' ')}: ${count}\n`;
+      }
+
+      await bot.sendMessage(msg.chat.id, response, { parse_mode: 'Markdown' });
+    } catch (err) {
+      log.error(`/contacts command failed: ${err.message}`);
+      await bot.sendMessage(msg.chat.id, `Error: ${err.message}`);
+    }
+  });
+
+  // === Help Command ===
+
   bot.onText(/\/help/, async (msg) => {
     const helpText = [
       '🃏 *Pokemon Card Agent Commands*',
@@ -609,6 +683,8 @@ function startListener() {
       '/export deals [days] — Send deals CSV',
       '/export outreach [days] — Send outreach CSV',
       '/report [days] — Deal summary report',
+      '/find <city> — Find local businesses for outreach',
+      '/contacts — Contact list stats',
       '/health — System health & circuit breakers',
       '/help — Show this help message'
     ].join('\n');

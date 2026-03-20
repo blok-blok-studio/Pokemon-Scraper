@@ -9,7 +9,7 @@ export async function GET() {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    const [todaySpend, monthSpend, byService, dailyBreakdown, totalRecords] = await Promise.all([
+    const [todaySpend, monthSpend, byService, totalRecords] = await Promise.all([
       prisma.apiUsage.aggregate({
         where: { calledAt: { gte: todayStart } },
         _sum: { estimatedCostUsd: true }
@@ -24,19 +24,27 @@ export async function GET() {
         _count: true,
         orderBy: { _sum: { estimatedCostUsd: 'desc' } }
       }),
-      prisma.$queryRaw`
-        SELECT
-          DATE("called_at") as date,
-          service,
-          SUM("estimated_cost_usd") as cost,
-          COUNT(*) as calls
-        FROM "api_usage"
-        WHERE "called_at" >= ${monthStart}
-        GROUP BY DATE("called_at"), service
-        ORDER BY date DESC
-      ` as Promise<any[]>,
       prisma.apiUsage.count()
     ])
+
+    // Build daily breakdown from individual records (avoids raw SQL issues)
+    const recentRecords = await prisma.apiUsage.findMany({
+      where: { calledAt: { gte: monthStart } },
+      select: { service: true, estimatedCostUsd: true, calledAt: true },
+      orderBy: { calledAt: 'desc' }
+    })
+
+    const dailyMap: Record<string, { date: string; service: string; cost: number; calls: number }> = {}
+    recentRecords.forEach(r => {
+      const dateStr = r.calledAt.toISOString().split('T')[0]
+      const key = `${dateStr}-${r.service}`
+      if (!dailyMap[key]) {
+        dailyMap[key] = { date: dateStr, service: r.service, cost: 0, calls: 0 }
+      }
+      dailyMap[key].cost += r.estimatedCostUsd || 0
+      dailyMap[key].calls += 1
+    })
+    const dailyBreakdown = Object.values(dailyMap).sort((a, b) => b.date.localeCompare(a.date))
 
     return NextResponse.json({
       today: todaySpend._sum.estimatedCostUsd || 0,

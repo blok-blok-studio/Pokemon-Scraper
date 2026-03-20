@@ -47,3 +47,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    const numId = parseId(id)
+    if (numId === null) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+
+    // Delete related notes first
+    await prisma.note.deleteMany({ where: { entityType: 'deal', entityId: numId } })
+    await prisma.cardListing.delete({ where: { id: numId } })
+
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error('DELETE /api/deals/[id] error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

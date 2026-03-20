@@ -16,6 +16,17 @@
     "Pokemon Evolving Skies booster",
     "Pokemon rare holo card"
   ],
+  "sources": {
+    "ebay": { "enabled": true, "maxPages": 3 },
+    "tcgplayer": { "enabled": true, "maxPages": 2 },
+    "trollandtoad": { "enabled": true, "maxPages": 2 },
+    "mercari": { "enabled": true, "maxPages": 2 },
+    "offerup": { "enabled": true, "maxPages": 2 },
+    "whatnot": { "enabled": true, "maxPages": 2 },
+    "cardmarket": { "enabled": true, "maxPages": 2 },
+    "amazon": { "enabled": true, "maxPages": 1 },
+    "gamestop": { "enabled": true, "maxPages": 1 }
+  },
   "minDiscountPercent": 10,
   "maxPriceUSD": 1000,
   "scrapingIntervalMinutes": 30,

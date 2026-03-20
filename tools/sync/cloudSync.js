@@ -19,6 +19,7 @@ const TABLES = [
   { name: 'price_history', sqliteTable: 'price_history', endpoint: 'prices' },
   { name: 'api_usage', sqliteTable: 'api_usage', endpoint: 'usage' },
   { name: 'automation_tasks', sqliteTable: 'automation_tasks', endpoint: 'tasks' },
+  { name: 'agent_memory', sqliteTable: 'agent_memory', endpoint: 'memory' },
 ];
 
 function sleep(ms) {

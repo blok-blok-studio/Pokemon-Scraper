@@ -18,7 +18,8 @@
       "reply-handler": { "enabled": true, "env": { "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY" } },
       "data-export": { "enabled": true },
       "inventory-tracker": { "enabled": true },
-      "system-health": { "enabled": true }
+      "system-health": { "enabled": true },
+      "business-finder": { "enabled": true, "env": { "YELP_API_KEY": "YELP_API_KEY" } }
     }
   },
   "gateway": {
@@ -28,11 +29,11 @@
   "crons": {
     "scrape-cycle": {
       "schedule": "*/30 * * * *",
-      "task": "Run the scrape cycle: first check daily spend via spend-tracker, then scrape all sources using pokemon-scraper skill, analyze new listings with card-analyzer skill, and alert on deals via deal-alerts skill. If spend is over 80% of cap, only scrape watchlist cards."
+      "task": "Run the scrape cycle: first check daily spend via spend-tracker, then run the unified multi-source scraper (node tools/scraper-engine/scrapeAll-cli.js cycle) which searches eBay, TCGPlayer, and Troll and Toad simultaneously. Analyze new listings with card-analyzer skill (includes auto price verification and memory extraction). Alert on deals via deal-alerts skill. If spend is over 80% of cap, only scrape watchlist cards."
     },
     "outreach-cycle": {
       "schedule": "0 10 * * *",
-      "task": "Run the daily outreach cycle: check daily spend, then email all eligible contacts using email-outreach skill, then call eligible contacts using voice-outreach skill. Respect all cooldowns and daily limits from config."
+      "task": "Run the daily outreach cycle: check daily spend, then load contacts from config/contacts.json. Email all eligible contacts using email-outreach skill with staggered sending (sendEmailBatch). Then call eligible contacts using voice-outreach skill. Respect all cooldowns, daily limits, ISP rate limits, and warm-up schedule from config. Check bounce health before starting — pause if reputation is at risk."
     },
     "daily-summary": {
       "schedule": "0 20 * * *",
@@ -57,6 +58,10 @@
     "portfolio-update": {
       "schedule": "0 12 * * *",
       "task": "Update market prices for all cards in inventory using inventory-tracker skill. Alert via Telegram if any card dropped >20% or gained >50% since purchase."
+    },
+    "contact-discovery": {
+      "schedule": "0 11 * * 3",
+      "task": "Run weekly contact discovery using business-finder skill. Search for card shops, pawn shops, thrift stores, and comic book stores in configured cities. Use node tools/outreach/contact-cli.js find command. After discovery, report results via Telegram. Only search each city once per week."
     }
   }
 }

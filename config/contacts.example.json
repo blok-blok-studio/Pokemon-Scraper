@@ -1,6 +1,14 @@
 [
-  { "name": "GameStop Cards", "email": "example@test.com", "type": "card_shop", "phone": null, "timezone": null },
-  { "name": "Local Pawn Exchange", "email": "example2@test.com", "type": "pawn_shop", "phone": "+15551234567", "timezone": "America/Denver" },
-  { "name": "FB Seller Mike", "email": "example3@test.com", "type": "facebook_seller", "phone": null, "timezone": null },
-  { "name": "CardMarket Online", "email": "example4@test.com", "type": "online_seller", "phone": null, "timezone": null }
+  { "name": "GameStop Cards", "email": "example@test.com", "type": "card_shop", "phone": null, "timezone": "America/Denver", "location": "Denver, CO", "notes": "Large Pokemon TCG section" },
+  { "name": "Local Pawn Exchange", "email": "example2@test.com", "type": "pawn_shop", "phone": "+15551234567", "timezone": "America/Denver", "location": "Aurora, CO", "notes": null },
+  { "name": "Goodwill Lakewood", "email": "example3@test.com", "type": "thrift_store", "phone": null, "timezone": "America/Denver", "location": "Lakewood, CO", "notes": "Large toy section, sometimes has card binders" },
+  { "name": "StorageTreasures Dan", "email": "example4@test.com", "type": "storage_unit", "phone": "+15559876543", "timezone": "America/Denver", "location": null, "notes": "Buys storage units at auction, flips contents" },
+  { "name": "Mile High Antiques", "email": "example5@test.com", "type": "antique_mall", "phone": null, "timezone": "America/Denver", "location": "Denver, CO", "notes": "Multiple vendor booths, some carry vintage toys" },
+  { "name": "Sunday Flea Market", "email": "example6@test.com", "type": "flea_market", "phone": null, "timezone": "America/Denver", "location": "Denver, CO", "notes": "Weekly Sunday market, booth 42 sometimes has cards" },
+  { "name": "Comics & Capes", "email": "example7@test.com", "type": "comic_book_store", "phone": null, "timezone": "America/Denver", "location": "Boulder, CO", "notes": "Carries TCG products, buys collections" },
+  { "name": "Mountain Estate Sales", "email": "example8@test.com", "type": "estate_sale", "phone": "+15551112222", "timezone": "America/Denver", "location": "Denver metro", "notes": "Runs 3-4 estate sales per week" },
+  { "name": "FB Seller Mike", "email": "example9@test.com", "type": "facebook_seller", "phone": null, "timezone": null, "location": null, "notes": "Posts Pokemon lots regularly" },
+  { "name": "CardMarket Online", "email": "example10@test.com", "type": "online_seller", "phone": null, "timezone": null, "location": null, "notes": "eBay store with good feedback" },
+  { "name": "Salvation Army Downtown", "email": "example11@test.com", "type": "secondhand_store", "phone": null, "timezone": "America/Denver", "location": "Denver, CO", "notes": null },
+  { "name": "Neighborhood Garage Sales", "email": "example12@test.com", "type": "garage_sale", "phone": null, "timezone": "America/Denver", "location": "Highlands Ranch, CO", "notes": "Community-wide garage sale organizer, quarterly events" }
 ]

@@ -29,6 +29,8 @@ export default function PipelinePage() {
   const { data: deals, lastUpdated, refresh } = useLiveData<Deal[]>('/api/deals?limit=200')
   const [dragging, setDragging] = useState<number | null>(null)
   const [localStages, setLocalStages] = useState<Record<number, string>>({})
+  const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set())
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
 
   async function moveToStage(dealId: number, stage: string) {
     const previousStages = { ...localStages }
@@ -42,8 +44,26 @@ export default function PipelinePage() {
       if (!res.ok) throw new Error('PATCH failed')
       refresh()
     } catch {
-      // Revert optimistic update on failure
       setLocalStages(previousStages)
+      refresh()
+    }
+  }
+
+  async function deleteDeal(dealId: number) {
+    // Optimistic remove
+    setDeletedIds(prev => new Set(prev).add(dealId))
+    setConfirmDelete(null)
+    try {
+      const res = await fetch(`/api/deals/${dealId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('DELETE failed')
+      refresh()
+    } catch {
+      // Revert on failure
+      setDeletedIds(prev => {
+        const next = new Set(prev)
+        next.delete(dealId)
+        return next
+      })
       refresh()
     }
   }
@@ -61,10 +81,12 @@ export default function PipelinePage() {
     }
   }
 
-  const displayDeals = (deals || []).map(d => ({
-    ...d,
-    pipelineStage: localStages[d.id] || d.pipelineStage,
-  }))
+  const displayDeals = (deals || [])
+    .filter(d => !deletedIds.has(d.id))
+    .map(d => ({
+      ...d,
+      pipelineStage: localStages[d.id] || d.pipelineStage,
+    }))
 
   return (
     <div className="space-y-6">
@@ -92,10 +114,21 @@ export default function PipelinePage() {
                     key={d.id}
                     draggable
                     onDragStart={e => handleDragStart(e, d.id)}
-                    className="bg-gray-800/80 rounded-lg p-3 cursor-grab active:cursor-grabbing border border-gray-700/50 hover:border-gray-600"
+                    className="bg-gray-800/80 rounded-lg p-3 cursor-grab active:cursor-grabbing border border-gray-700/50 hover:border-gray-600 group relative"
                   >
+                    {/* Trash icon — top right, only on hover */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setConfirmDelete(confirmDelete === d.id ? null : d.id) }}
+                      className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-gray-600 hover:text-red-400 transition-all z-10"
+                      title="Delete deal"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+
                     <Link href={`/deals/${d.id}`} className="hover:text-brand">
-                      <p className="text-sm font-medium truncate">{d.cardName}</p>
+                      <p className="text-sm font-medium truncate pr-6">{d.cardName}</p>
                     </Link>
                     {d.setName && <p className="text-xs text-gray-400 truncate">{d.setName}</p>}
                     <div className="flex items-center justify-between mt-2">
@@ -103,6 +136,27 @@ export default function PipelinePage() {
                       <span className="text-xs font-medium">{formatCurrency(d.price)}</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{timeAgo(d.foundAt)}</p>
+
+                    {/* Confirm bar — slides in below the card content */}
+                    {confirmDelete === d.id && (
+                      <div className="mt-2 pt-2 border-t border-gray-700/50 flex items-center justify-between">
+                        <span className="text-[10px] text-gray-500">Delete this deal?</span>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteDeal(d.id) }}
+                            className="text-[10px] px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmDelete(null) }}
+                            className="text-[10px] px-2 py-1 rounded bg-gray-700 text-gray-400 hover:bg-gray-600 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

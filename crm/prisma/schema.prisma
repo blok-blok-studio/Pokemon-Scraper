@@ -173,6 +173,25 @@ model AutomationTask {
   @@map("automation_tasks")
 }
 
+model AgentMemory {
+  id            Int       @id @default(autoincrement())
+  localId       Int       @unique @map("local_id")
+  category      String
+  content       String
+  context       String?
+  importance    String    @default("normal")
+  sourceEvent   String?   @map("source_event")
+  timesRecalled Int       @default(0) @map("times_recalled")
+  lastRecalledAt DateTime? @map("last_recalled_at")
+  expiresAt     DateTime? @map("expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([category])
+  @@index([importance])
+  @@index([createdAt(sort: Desc)])
+  @@map("agent_memory")
+}
+
 model SyncCursor {
   id                Int      @id @default(autoincrement())
   tableName         String   @unique @map("table_name")

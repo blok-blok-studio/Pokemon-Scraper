@@ -105,6 +105,19 @@ function init(customPath) {
       notes TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS agent_memory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      content TEXT NOT NULL,
+      context TEXT,
+      importance TEXT DEFAULT 'normal',
+      source_event TEXT,
+      times_recalled INTEGER DEFAULT 0,
+      last_recalled_at DATETIME,
+      expires_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Add columns if they don't exist (safe migrations)
     -- SQLite doesn't have IF NOT EXISTS for ALTER TABLE, so we catch errors
   `);
@@ -141,6 +154,9 @@ function init(customPath) {
   safeCreateIndex('idx_purchases_status', 'purchases', 'status')
   safeCreateIndex('idx_purchases_card', 'purchases', 'card_name')
   safeCreateIndex('idx_purchases_date', 'purchases', 'purchase_date DESC')
+  safeCreateIndex('idx_memory_category', 'agent_memory', 'category')
+  safeCreateIndex('idx_memory_importance', 'agent_memory', 'importance')
+  safeCreateIndex('idx_memory_created', 'agent_memory', 'created_at DESC')
 
   return db;
 }
@@ -488,6 +504,111 @@ function getUnsoldInventory(db) {
   return db.prepare(`SELECT * FROM purchases WHERE status IN ('in_collection', 'listed_for_sale') ORDER BY purchase_date DESC`).all();
 }
 
+// ===== Agent Memory Functions =====
+
+function storeMemory(db, data) {
+  return db.prepare(`
+    INSERT INTO agent_memory (category, content, context, importance, source_event, expires_at)
+    VALUES (@category, @content, @context, @importance, @source_event, @expires_at)
+  `).run({
+    category: data.category,
+    content: data.content,
+    context: data.context || null,
+    importance: data.importance || 'normal',
+    source_event: data.source_event || null,
+    expires_at: data.expires_at || null,
+  });
+}
+
+function storeMemories(db, memories) {
+  const stmt = db.prepare(`
+    INSERT INTO agent_memory (category, content, context, importance, source_event, expires_at)
+    VALUES (@category, @content, @context, @importance, @source_event, @expires_at)
+  `);
+  const insert = db.transaction((items) => {
+    for (const m of items) {
+      stmt.run({
+        category: m.category,
+        content: m.content,
+        context: m.context || null,
+        importance: m.importance || 'normal',
+        source_event: m.source_event || null,
+        expires_at: m.expires_at || null,
+      });
+    }
+  });
+  insert(memories);
+  return { stored: memories.length };
+}
+
+function getMemories(db, { category, importance, limit = 50, includeExpired = false } = {}) {
+  let sql = 'SELECT * FROM agent_memory WHERE 1=1';
+  const params = [];
+
+  if (!includeExpired) {
+    sql += ' AND (expires_at IS NULL OR expires_at > datetime("now"))';
+  }
+  if (category) {
+    sql += ' AND category = ?';
+    params.push(category);
+  }
+  if (importance) {
+    sql += ' AND importance = ?';
+    params.push(importance);
+  }
+
+  sql += ' ORDER BY importance DESC, created_at DESC LIMIT ?';
+  params.push(limit);
+
+  return db.prepare(sql).all(...params);
+}
+
+function getMemoriesForContext(db, limit = 30) {
+  // Get the most important and recent memories for injecting into prompts
+  // Priority: critical > high > normal, then by recency
+  const memories = db.prepare(`
+    SELECT * FROM agent_memory
+    WHERE (expires_at IS NULL OR expires_at > datetime('now'))
+    ORDER BY
+      CASE importance
+        WHEN 'critical' THEN 3
+        WHEN 'high' THEN 2
+        WHEN 'normal' THEN 1
+        WHEN 'low' THEN 0
+      END DESC,
+      created_at DESC
+    LIMIT ?
+  `).all(limit);
+
+  // Update recall count
+  const ids = memories.map(m => m.id);
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`UPDATE agent_memory SET times_recalled = times_recalled + 1, last_recalled_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...ids);
+  }
+
+  return memories;
+}
+
+function getMemoryStats(db) {
+  const total = db.prepare('SELECT COUNT(*) as c FROM agent_memory').get();
+  const byCategory = db.prepare('SELECT category, COUNT(*) as c FROM agent_memory GROUP BY category ORDER BY c DESC').all();
+  const byImportance = db.prepare('SELECT importance, COUNT(*) as c FROM agent_memory GROUP BY importance').all();
+  const recent = db.prepare('SELECT * FROM agent_memory ORDER BY created_at DESC LIMIT 5').all();
+  const mostRecalled = db.prepare('SELECT * FROM agent_memory WHERE times_recalled > 0 ORDER BY times_recalled DESC LIMIT 5').all();
+
+  return { total: total.c, byCategory, byImportance, recent, mostRecalled };
+}
+
+function pruneExpiredMemories(db) {
+  const result = db.prepare('DELETE FROM agent_memory WHERE expires_at IS NOT NULL AND expires_at <= datetime("now")').run();
+  return { pruned: result.changes };
+}
+
+function deleteMemory(db, id) {
+  return db.prepare('DELETE FROM agent_memory WHERE id = ?').run(id);
+}
+
 module.exports = {
   init,
   getDb,
@@ -519,4 +640,11 @@ module.exports = {
   updatePurchaseMarketPrice,
   getPortfolioSummary,
   getUnsoldInventory,
+  storeMemory,
+  storeMemories,
+  getMemories,
+  getMemoriesForContext,
+  getMemoryStats,
+  pruneExpiredMemories,
+  deleteMemory,
 };
