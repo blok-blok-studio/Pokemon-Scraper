@@ -12,6 +12,33 @@ dotenv.config({ override: true });
 const log = createChildLogger('email-outreach');
 const anthropic = new Anthropic();
 
+// Startup validation
+function validateEmailConfig() {
+  const issues = [];
+  if (!process.env.RESEND_API_KEY) issues.push('RESEND_API_KEY not set');
+  if (!process.env.FROM_EMAIL) issues.push('FROM_EMAIL not set');
+  if (!process.env.REPLY_TO_EMAIL) issues.push('REPLY_TO_EMAIL not set');
+
+  const from = process.env.FROM_EMAIL || '';
+  const replyTo = process.env.REPLY_TO_EMAIL || '';
+
+  // Warn if FROM and REPLY_TO use the same domain (should be different for safety)
+  if (from && replyTo) {
+    const fromDomain = from.split('@')[1];
+    const replyDomain = replyTo.split('@')[1];
+    if (fromDomain === replyDomain && !fromDomain?.includes('test')) {
+      log.warn('FROM_EMAIL and REPLY_TO_EMAIL use the same domain. Consider using a separate outreach domain to protect your main domain reputation.');
+    }
+  }
+
+  if (issues.length > 0) {
+    log.warn('Email config issues: ' + issues.join(', '));
+  }
+  return issues.length === 0;
+}
+
+const emailConfigValid = validateEmailConfig();
+
 const SELLER_CONTEXT = {
   card_shop: {
     tone: 'knowledgeable collector-to-dealer',
@@ -321,6 +348,11 @@ Write a natural, personalized email that fits this specific type of seller.`
 
 async function sendEmail(target, database) {
   try {
+    if (!emailConfigValid) {
+      log.error('Email not configured. Set RESEND_API_KEY, FROM_EMAIL, REPLY_TO_EMAIL in .env');
+      return { skipped: true, reason: 'not_configured' };
+    }
+
     const config = getConfig();
     const spendCap = parseFloat(process.env.DAILY_API_SPEND_CAP_USD || '5.00');
 
