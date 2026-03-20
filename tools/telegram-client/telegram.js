@@ -226,6 +226,68 @@ function startListener() {
     }
   });
 
+  bot.onText(/\/search (.+)/, async (msg, match) => {
+    try {
+      const query = match[1].trim();
+      if (!query) {
+        await bot.sendMessage(msg.chat.id, 'Usage: /search <query>\nExample: /search Pikachu VMAX');
+        return;
+      }
+
+      await bot.sendMessage(msg.chat.id, `🔍 Searching eBay for "${query}"...`);
+
+      const { scrapeEbay } = require('../scraper-engine/ebay');
+      const { lookupPriceRateLimited } = require('../scraper-engine/tcgplayer');
+
+      // Scrape eBay
+      const listings = await scrapeEbay({ query, maxPrice: 1000, maxPages: 2 });
+
+      if (listings.length === 0) {
+        await bot.sendMessage(msg.chat.id, `❌ No listings found for "${query}"`);
+        return;
+      }
+
+      // Look up TCGPlayer price
+      let marketPrice = null;
+      try {
+        const priceResult = await lookupPriceRateLimited(query);
+        if (priceResult) marketPrice = priceResult.marketPrice;
+      } catch (e) {
+        log.warn(`TCG lookup failed for "${query}": ${e.message}`);
+      }
+
+      // Insert listings into DB with market price
+      let inserted = 0;
+      for (const listing of listings) {
+        listing.tcg_market_price = marketPrice;
+        if (marketPrice && listing.price < marketPrice) {
+          listing.discount_percent = ((marketPrice - listing.price) / marketPrice * 100);
+        }
+        try {
+          const result = db.insertListing(database, listing);
+          if (result.changes > 0) inserted++;
+        } catch (e) {
+          // Skip duplicates
+        }
+      }
+
+      // Summary
+      const cheapest = listings.sort((a, b) => a.price - b.price)[0];
+      const response = [
+        `✅ *Search Complete: "${query}"*`,
+        `Found: ${listings.length} listings (${inserted} new)`,
+        marketPrice ? `📊 TCG Market Price: $${marketPrice.toFixed(2)}` : '📊 Market price: unknown',
+        `💰 Cheapest: $${cheapest.price.toFixed(2)}${marketPrice ? ` (${Math.round((marketPrice - cheapest.price) / marketPrice * 100)}% off)` : ''}`,
+        `🔗 [View](${cheapest.url})`,
+      ].join('\n');
+
+      await bot.sendMessage(msg.chat.id, response, { parse_mode: 'Markdown' });
+    } catch (err) {
+      log.error(`/search error: ${err.message}`);
+      await bot.sendMessage(msg.chat.id, `Error: ${err.message}`);
+    }
+  });
+
   bot.onText(/\/buy (.+)/, async (msg, match) => {
     try {
       const parts = match[1].trim().split(/\s+/);
@@ -538,6 +600,7 @@ function startListener() {
       '/remove <card name> — Remove card from watchlist',
       '/spend — API spend breakdown',
       '/proxies — Proxy pool status',
+      '/search <query> — Search eBay + check TCG price',
       '/buy <listing-id> <price> — Record a purchase',
       '/sell <purchase-id> <price> — Record a sale',
       '/portfolio — Portfolio summary & ROI',

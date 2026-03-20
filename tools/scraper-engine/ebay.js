@@ -120,6 +120,9 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
 
               if (!title || title === 'Shop on eBay' || !priceText || !link) return;
 
+              // Clean eBay suffix from title
+              const cleanTitle = title.replace(/\.?\s*Opens in a new window or tab\s*$/i, '').trim();
+
               // Extract numeric price
               const priceMatch = priceText.match(/\$([\d,]+\.?\d*)/);
               if (!priceMatch) return;
@@ -129,7 +132,7 @@ async function scrapeEbay({ query, maxPrice, condition, sortBy, maxPages = 3 }) 
               if (priceText.includes(' to ')) return;
 
               items.push({
-                card_name: title,
+                card_name: cleanTitle,
                 price,
                 condition: cond,
                 seller_name: seller,

@@ -27,7 +27,6 @@ const FILLER_WORDS = [
 // Accessory / non-card detection categories
 const ACCESSORY_CATEGORIES = {
   sleeve: ['sleeve', 'sleeves', 'binder', 'top loader', 'toploader', 'penny sleeve', 'card saver', 'card protector', 'deck box', 'storage box', 'portfolio'],
-  sealed: ['booster pack', 'booster box', 'elite trainer box', 'etb', 'blister pack', 'tin', 'collection box', 'build and battle', 'case sealed', 'factory sealed', 'sealed box', 'sealed pack', '6 pack', '10 pack', '36 pack'],
   lot: ['lot of', 'card lot', 'bulk lot', 'bundle of', 'collection of', 'set of', 'x cards', 'random cards', 'mystery pack', 'repack', 'repacks', 'grab bag'],
   non_card: ['playmat', 'play mat', 'coin', 'dice', 'pin', 'figure', 'plush', 'jumbo card', 'oversized', 'poster', 'art print', 'sticker'],
   code: ['code card', 'online code', 'ptcgo', 'ptcgl', 'digital code', 'tcg live code', 'tcg online code'],

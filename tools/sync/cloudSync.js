@@ -9,7 +9,7 @@ const log = createChildLogger('cloud-sync');
 
 const CRM_URL = process.env.CRM_SYNC_URL;
 const API_KEY = process.env.CRM_SYNC_API_KEY;
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 10;
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
 
